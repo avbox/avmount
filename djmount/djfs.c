@@ -356,7 +356,7 @@ BrowseRoot (VFS* const vfs, const char* const sub_path,
     
     const PtrArray* const names = DeviceList_GetDevicesNames (tmp_ctx);
     
-    FILE_BEGIN("devices") {
+    FILE_BEGIN(".devices") {
       if (names) {
 	char* str = talloc_strdup(tmp_ctx, "");
 	const char* devName;
