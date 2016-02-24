@@ -28,6 +28,7 @@
 #include "object.h"
 #include <stdlib.h>
 #include <inttypes.h>
+#include <assert.h>
 
 
 /******************************************************************************
@@ -162,7 +163,7 @@ const OBJTYPE ## _Class* OBJECT_CLASS_PTR(OBJTYPE)			\
 			the_class._.base.size	= sizeof (OBJTYPE);	\
 			the_class._.base.initializer = &the_default_object; \
 			the_class._.base.finalize = NULL;		\
-                        if (INITFUNCTION != NULL)			\
+			assert(INITFUNCTION); \
 				INITFUNCTION(&the_class);		\
                 }							\
 		_ObjectClass_Unlock();					\

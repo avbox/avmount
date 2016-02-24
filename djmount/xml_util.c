@@ -43,7 +43,7 @@
 const char*
 XMLUtil_GetElementValue (IN const IXML_Element* element)
 {
-	char* res = NULL;
+	const char* res = NULL;
 	IXML_Node* child = ixmlNode_getFirstChild 
 		(discard_const_p (IXML_Node, XML_E2N (element)));
 	while (child && !res) {
@@ -133,7 +133,7 @@ XMLUtil_FindFirstElementValue (const IXML_Node* const node,
  * XMLUtil_GetDocumentString
  *****************************************************************************/
 char*
-XMLUtil_GetDocumentString (void* context, const IXML_Document* doc)
+XMLUtil_GetDocumentString (void* context, IXML_Document* doc)
 {
 	// TBD XXX
 	// TBD prepend <?xml version="1.0"?> if not already done ???

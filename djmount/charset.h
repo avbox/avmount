@@ -160,7 +160,7 @@ Charset_PrintString (Charset_Direction, const char* str, FILE* stream);
 int
 Charset_Finish();
 #else
-#	define Charset_Finish()	   0
+#	define Charset_Finish()	   (void) 0
 #endif
 
 
