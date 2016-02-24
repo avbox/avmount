@@ -26,7 +26,8 @@
 #ifndef UPNP_UTIL_H_INCLUDED
 #define UPNP_UTIL_H_INCLUDED
 
-
+#include <string.h>
+#include <upnp/upnp.h>
 #include <upnp/upnptools.h>
 
 

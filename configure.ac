@@ -11,9 +11,6 @@
 AC_PREREQ(2.59)
 AC_INIT(djmount, 0.71, r3mi@users.sourceforge.net)
 
-# share auxiliary files with sub-configure in "libupnp"
-AC_CONFIG_AUX_DIR(libupnp/config.aux)
-AC_CONFIG_MACRO_DIR(libupnp/m4)
 AC_CONFIG_MACRO_DIR(m4)
 AC_CONFIG_MACRO_DIR(gl/m4)
 
@@ -32,14 +29,15 @@ AC_REVISION([$Revision: 266 $])
 # ----------------------
 #
 
-RT_BOOL_ARG_ENABLE([debug], [yes], [extra debugging code])
+AC_ARG_ENABLE([debug], [extra debugging code])
+AM_CONDITIONAL(ENABLE_DEBUG, test x"$enable_debug" = xyes)
 if test x"$enable_debug" = xyes; then
 	AC_DEFINE([DEBUG],1,[Define to 1 to compile debug code])
 fi
 
-
-RT_BOOL_ARG_ENABLE([charset], [yes], 
+AC_ARG_ENABLE([charset],
 	[charset conversion code and -o iocharset option (assume all UTF-8 when disabled)])
+AM_CONDITIONAL(ENABLE_CHARSET, test x"$enable_charset" = xyes)
 if test x"$enable_charset" = xyes; then
 	AC_DEFINE([HAVE_CHARSET],1,
 		  [Define to 1 to have charset conversion code])
@@ -53,7 +51,6 @@ fi
 AC_PROG_CC
 gl_EARLY
 
-# build static libraries by default (for bundled libupnp and talloc)
 AC_DISABLE_SHARED
 AC_PROG_LIBTOOL
 
@@ -76,9 +73,9 @@ if test x"$enable_debug" = xyes; then
 	:
 else
 	# add optimise for size
-	AX_CFLAGS_GCC_OPTION([-Os])
+	CFLAGS="$CFLAGS -Os"
 fi
-AX_CFLAGS_WARN_ALL
+CFLAGS="$CFLAGS -Wall"
 
 # Arrange for large-file support / large off_t
 # Define _FILE_OFFSET_BITS and _LARGE_FILES if necessary
@@ -134,13 +131,6 @@ gl_INIT
 # ------
 #
 
-AC_MSG_CHECKING([whether to use external talloc])
-AC_ARG_WITH([external-talloc], 
-	AS_HELP_STRING([--with-external-talloc],
-	[use external talloc library (not recommended) @<:@default = use internal bundled library@:>@]))
-
-if test x"$with_external_talloc" = xyes; then
-	AC_MSG_RESULT([yes])
 	# Find the library. This macro handles the TALLOC_CFLAGS and _LIBS,
 	# the --with-talloc-prefix arg, and pkg-config (if any).
 	RT_PACKAGE_FIND([talloc], [], [-ltalloc], [talloc >= 4.0], 
@@ -165,14 +155,7 @@ if test x"$with_external_talloc" = xyes; then
 ** use the internal bundled library. 
 ** Or $TALLOC_MSG_ERRORS
 	])])
-else
-	AC_MSG_RESULT([no (build bundled library)])
-	# Configure bundled talloc
-	m4_include(talloc/talloc/config.m4)
-	AC_SUBST(TALLOC_CFLAGS, '-I$(top_srcdir)/talloc/talloc')
-	AC_SUBST(TALLOC_LIBS, '-L$(top_builddir)/talloc -ltalloc')
-fi
-AM_CONDITIONAL(INTERNAL_TALLOC, test x"$with_external_talloc" != xyes)
+AM_CONDITIONAL(INTERNAL_TALLOC, false)
 
 
 #
@@ -210,6 +193,7 @@ ACX_PTHREAD([],[AC_MSG_ERROR([POSIX threads are required to build this program])
 # to the default compilation variables. This will also allow the tests below
 # (fuse, libupnp, ...) to pick these flags.
 LIBS="$PTHREAD_LIBS $LIBS"
+
 CFLAGS="$CFLAGS $PTHREAD_CFLAGS"
 CC="$PTHREAD_CC"
 
@@ -242,18 +226,6 @@ RT_PACKAGE_FIND([fuse], [-D_FILE_OFFSET_BITS=64], [-lfuse], [fuse >= 2.2],
 
 FUSE_CFLAGS="$FUSE_CFLAGS -DFUSE_USE_VERSION=22"
 
-
-#
-# libupnp 
-# -------
-#
-AC_MSG_CHECKING([whether to use external libupnp])
-AC_ARG_WITH([external-libupnp], 
-	AS_HELP_STRING([--with-external-libupnp],
-	[use external libupnp library (at least 1.3.1) @<:@default = use internal bundled library@:>@]))
-
-if test x"$with_external_libupnp" = xyes; then
-	AC_MSG_RESULT([yes])
 	# Find the library. This macro handles the LIBUPNP_CFLAGS and _LIBS,
 	# the --with-libupnp-prefix arg, and pkg-config (if any).
 	RT_PACKAGE_FIND([libupnp], [], [-lupnp -lthreadutil -lixml], 
@@ -278,34 +250,8 @@ if test x"$with_external_libupnp" = xyes; then
 ** use the internal bundled library. 
 ** Or $LIBUPNP_MSG_ERRORS
 	])])
-else
-	AC_MSG_RESULT([no (build bundled library)])
-	# Configure bundled libupnp :
-	# compile only necessary subset (static client libraries), 
-	# plus debug code if necessary.
-	# XXX there is no documented way to pass additional arguments 
-	# XXX to sub-configure, so we just hack the internal variable 
-	# XXX '$ac_configure_args' ...
-	mysave_ac_arg=$ac_configure_args
-	ac_configure_args="$ac_configure_args --enable-client --disable-device --disable-shared --enable-debug=$enable_debug"
-	AC_CONFIG_SUBDIRS(libupnp)
-	# Set compilation variables to the internal libupnp.
-	# The includes are a bit tricky to set because the uninstalled 
-	# include tree does not match the installed structure <upnp/*.h> :
-	# this is handled in djmount/Makefile.am
-	AC_SUBST(LIBUPNP_CFLAGS)
-	bd='$(top_builddir)/libupnp' # ! shall not expand $top_builddir !
-	AC_SUBST(LIBUPNP_LIBS, 
-	 ["-L$bd/upnp -lupnp -L$bd/threadutil -lthreadutil -L$bd/ixml -lixml"])
-	# Set specific libupnp debug flag (not provided by bundled library,
-	# but provided by external libupnp version >= 1.3)
-	if test x"$enable_debug" = xyes; then
-		AC_DEFINE([UPNP_HAVE_DEBUG],1,
-			  [Define to 1 if libupnp debug code enabled])
-	fi
-fi
-AM_CONDITIONAL(INTERNAL_LIBUPNP, test x"$with_external_libupnp" != xyes)
 
+AM_CONDITIONAL(INTERNAL_LIBUPNP, false)
 
 
 #

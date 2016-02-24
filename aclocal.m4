@@ -8258,10 +8258,6 @@ AC_SUBST([am__tar])
 AC_SUBST([am__untar])
 ]) # _AM_PROG_TAR
 
-m4_include([libupnp/m4/acx_pthread.m4])
-m4_include([libupnp/m4/ax_cflags_gcc_option.m4])
-m4_include([libupnp/m4/ax_cflags_warn_all.m4])
-m4_include([libupnp/m4/rt_bool_arg_enable.m4])
 m4_include([gl/m4/error.m4])
 m4_include([gl/m4/exitfail.m4])
 m4_include([gl/m4/gnulib-comp.m4])

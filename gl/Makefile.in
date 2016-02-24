@@ -55,17 +55,13 @@ DIST_COMMON = $(noinst_HEADERS) $(srcdir)/Makefile.am \
 	$(srcdir)/Makefile.in error.c error.h exitfail.c exitfail.h \
 	hash.c hash.h xalloc.h xmalloc.c
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/libupnp/m4/acx_pthread.m4 \
-	$(top_srcdir)/libupnp/m4/ax_cflags_gcc_option.m4 \
-	$(top_srcdir)/libupnp/m4/ax_cflags_warn_all.m4 \
-	$(top_srcdir)/libupnp/m4/rt_bool_arg_enable.m4 \
+am__aclocal_m4_deps = \
 	$(top_srcdir)/gl/m4/error.m4 $(top_srcdir)/gl/m4/exitfail.m4 \
 	$(top_srcdir)/gl/m4/gnulib-comp.m4 $(top_srcdir)/gl/m4/hash.m4 \
 	$(top_srcdir)/gl/m4/minmax.m4 $(top_srcdir)/gl/m4/stdbool.m4 \
 	$(top_srcdir)/gl/m4/xalloc.m4 \
 	$(top_srcdir)/m4/rt_package_find.m4 \
 	$(top_srcdir)/m4/vl_lib_readline.m4 \
-	$(top_srcdir)/talloc/talloc/config.m4 \
 	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)

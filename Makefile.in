@@ -42,28 +42,19 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
-@INTERNAL_TALLOC_TRUE@am__append_1 = talloc 
-@INTERNAL_LIBUPNP_TRUE@am__append_2 = libupnp
 DIST_COMMON = README $(am__configure_deps) $(srcdir)/Makefile.am \
 	$(srcdir)/Makefile.in $(srcdir)/config.h.in \
 	$(top_srcdir)/configure AUTHORS COPYING ChangeLog INSTALL NEWS \
-	THANKS TODO libupnp/config.aux/compile \
-	libupnp/config.aux/config.guess libupnp/config.aux/config.sub \
-	libupnp/config.aux/depcomp libupnp/config.aux/install-sh \
-	libupnp/config.aux/ltmain.sh libupnp/config.aux/missing
+	THANKS TODO
 subdir = .
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/libupnp/m4/acx_pthread.m4 \
-	$(top_srcdir)/libupnp/m4/ax_cflags_gcc_option.m4 \
-	$(top_srcdir)/libupnp/m4/ax_cflags_warn_all.m4 \
-	$(top_srcdir)/libupnp/m4/rt_bool_arg_enable.m4 \
+am__aclocal_m4_deps = \
 	$(top_srcdir)/gl/m4/error.m4 $(top_srcdir)/gl/m4/exitfail.m4 \
 	$(top_srcdir)/gl/m4/gnulib-comp.m4 $(top_srcdir)/gl/m4/hash.m4 \
 	$(top_srcdir)/gl/m4/minmax.m4 $(top_srcdir)/gl/m4/stdbool.m4 \
 	$(top_srcdir)/gl/m4/xalloc.m4 \
 	$(top_srcdir)/m4/rt_package_find.m4 \
 	$(top_srcdir)/m4/vl_lib_readline.m4 \
-	$(top_srcdir)/talloc/talloc/config.m4 \
 	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
@@ -82,7 +73,7 @@ RECURSIVE_TARGETS = all-recursive check-recursive dvi-recursive \
 	uninstall-recursive
 ETAGS = etags
 CTAGS = ctags
-DIST_SUBDIRS = gl talloc libupnp djmount
+DIST_SUBDIRS = gl djmount
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 distdir = $(PACKAGE)-$(VERSION)
 top_distdir = $(distdir)
@@ -223,7 +214,7 @@ sysconfdir = @sysconfdir@
 target_alias = @target_alias@
 ACLOCAL_AMFLAGS = -I m4 -I gl/m4 -I libupnp/m4
 CLEANFILES = IUpnpErrFile.txt IUpnpInfoFile.txt
-SUBDIRS = gl $(am__append_1) $(am__append_2) djmount
+SUBDIRS = gl djmount
 EXTRA_DIST = search_help.txt
 
 # 
@@ -421,7 +412,7 @@ distclean-tags:
 distdir: $(DISTFILES)
 	$(am__remove_distdir)
 	mkdir $(distdir)
-	$(mkdir_p) $(distdir)/gl/m4 $(distdir)/libupnp/config.aux $(distdir)/libupnp/m4 $(distdir)/m4 $(distdir)/talloc/talloc
+	$(mkdir_p) $(distdir)/gl/m4 $(distdir)/m4
 	@srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`; \
 	topsrcdirstrip=`echo "$(top_srcdir)" | sed 's|.|.|g'`; \
 	list='$(DISTFILES)'; for file in $$list; do \
