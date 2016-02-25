@@ -49,6 +49,8 @@ struct _FileBuffer {
 	off_t		file_size; 
 	const char*	url;
 	const char*	content;
+	void*		handle;
+	off_t		offset;
 };
 
 
@@ -100,7 +102,9 @@ FileBuffer_CreateFromURL (void* talloc_context, const char* url,
 			.exact_read   = (file_size >= 0),
 			.file_size    = file_size,
 			.content      = NULL,
-			.url	      = NULL
+			.url          = NULL,
+			.handle       = NULL,
+			.offset       = 0
 		};
 		if (url) {
 			file->url = talloc_strdup (file, url);
@@ -188,23 +192,31 @@ FileBuffer_Read (FileBuffer* file, char* buffer,
 			}
 		}
 
-		// TBD
-		// TBD this is not optimised !! open / close on each read
-		// TBD
-
-		void* handle      = NULL;
+		int rc;
 		int contentLength = 0;
 		int httpStatus    = 0;
+		bool freshStream  = false;
 		char* contentType = NULL;
-		int rc = UpnpOpenHttpGetEx (file->url, &handle,
-					    &contentType, &contentLength,
-					    &httpStatus,
-					    offset, offset + size,
-					    HTTP_DEFAULT_TIMEOUT
-					    );
-		if (rc != UPNP_E_SUCCESS) 
-			goto HTTP_CHECK; // ---------->
-		// TBD TBD free contentType ??? I don't know ...
+
+		if (file->handle == NULL || file->offset != offset) {
+		HTTP_CONNECT:
+			if (file->handle) {
+				(void) UpnpCloseHttpGet (file->handle);
+				file->handle = NULL;
+				Log_Printf(LOG_DEBUG, "Closed stream: %s", file->url);
+			}
+			rc = UpnpOpenHttpGetEx (file->url, &file->handle,
+						    &contentType, &contentLength,
+						    &httpStatus,
+						    offset, file->file_size,
+						    HTTP_DEFAULT_TIMEOUT
+						    );
+			if (rc != UPNP_E_SUCCESS)
+				goto HTTP_CHECK; // ---------->
+			file->offset = offset;
+			freshStream = true;
+			Log_Printf(LOG_DEBUG, "Opened stream: %s", file->url);
+		}
 
 		/*
 		 * Read available bytes, or all bytes requested if exact_read :
@@ -221,10 +233,14 @@ FileBuffer_Read (FileBuffer* file, char* buffer,
 					    (intmax_t) read_size);
 			}
 			
-			rc = UpnpReadHttpGet (handle, buffer + n, &read_size,
+			rc = UpnpReadHttpGet (file->handle, buffer + n, &read_size,
 					      HTTP_DEFAULT_TIMEOUT);
 			if (rc != UPNP_E_SUCCESS) {
-				(void) UpnpCloseHttpGet (handle);
+				if (!freshStream) {
+					goto HTTP_CONNECT;
+				}
+				(void) UpnpCloseHttpGet (file->handle);
+				file->handle = NULL;
 				goto HTTP_CHECK; // ---------->
 			}
 
@@ -232,10 +248,9 @@ FileBuffer_Read (FileBuffer* file, char* buffer,
 			if (read_size == 0)
 				break; // ---------->
 			n += read_size;
+			file->offset += read_size;
 
 		} while (file->exact_read && n < size);
-
-		rc = UpnpCloseHttpGet (handle);
 
 	HTTP_CHECK:
 		if (rc != UPNP_E_SUCCESS) {
@@ -254,5 +269,17 @@ FileBuffer_Read (FileBuffer* file, char* buffer,
 		}
 	}
 	return n;
+}
+
+/******************************************************************************
+ * FileBuffer_Close
+ *****************************************************************************/
+
+void
+FileBuffer_Close(FileBuffer *file)
+{
+	if (file->url && file->handle) {
+		(void) UpnpCloseHttpGet (file->handle);
+	}
 }
 

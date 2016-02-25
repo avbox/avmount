@@ -359,6 +359,7 @@ fs_release (const char* path, struct fuse_file_info* fi)
 	FileBuffer* const file = (FileBuffer*) fi->fh;
 	
 	if (file) {
+		FileBuffer_Close (file);
 		talloc_free (file);
 		fi->fh = (intptr_t) NULL;
 	}

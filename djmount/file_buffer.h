@@ -151,6 +151,14 @@ ssize_t
 FileBuffer_Read (FileBuffer* file, char* buffer, 
 		 size_t size, off_t offset);
 
+/******************************************************************************
+ * @brief		Close the file.
+ *
+ * @param file		the FileBuffer object
+ *****************************************************************************/
+void
+FileBuffer_Close(FileBuffer *file);
+
 
 #ifdef __cplusplus
 }; // extern "C"
