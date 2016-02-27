@@ -43,16 +43,22 @@
 #	define HTTP_DEFAULT_TIMEOUT	30
 #endif
 
+#if USE_CURL
+#include "curl_util.h"
+#endif
 
 struct _FileBuffer {
 	bool		exact_read;
 	off_t		file_size; 
 	const char*	url;
 	const char*	content;
-	void*		handle;
-	off_t		offset;
+	off_t	     	offset;
+#if USE_CURL
+	Curl_File*  handle;
+#else
+	void*		    handle;
+#endif
 };
-
 
 /******************************************************************************
  * FileBuffer_CreateFromString
@@ -166,7 +172,50 @@ FileBuffer_Read (FileBuffer* file, char* buffer,
 			    " offset %" PRIdMAX " (file_size %" PRIdMAX ")",
 			    file->url, (intmax_t) size, (intmax_t) offset,
 			    (intmax_t) file->file_size);
-		
+
+		// Adjust request to file size, if known
+		if (file->file_size >= 0) {
+			if (offset > file->file_size) {
+				Log_Printf (LOG_ERROR,
+					"GetHttp url '%s' overflowed "
+					"size %" PRIdMAX " offset %" PRIdMAX,
+					file->url, (intmax_t) file->file_size,
+					(intmax_t) offset);
+				return -EOVERFLOW;
+			} else if (offset > file->file_size - size) {
+				size = MAX (0, file->file_size - offset);
+				Log_Printf (LOG_DEBUG,
+					    "GetHttp truncate to size %"
+					    PRIdMAX, (intmax_t) size);
+			}
+		}
+
+#if USE_CURL
+		if (file->handle == NULL) {
+			Log_Printf(LOG_DEBUG, "Opening %s", file->url);
+			file->handle = Curl_Open(file->url);
+			file->offset = 0;
+			if (file->handle == NULL) {
+				Log_Printf(LOG_ERROR, "curl_open() failed");
+				return -EIO;
+			}
+		}
+		if (file->offset != offset) {
+			Log_Printf(LOG_DEBUG, "Adjusting offset to %zd from %zd",
+				offset, file->offset);
+			Curl_Seek(file->handle, offset);
+			file->offset = offset;
+		}
+		do {
+			size_t read_size = size - n;
+			if ((read_size = Curl_Read(file->handle, buffer, read_size)) < 0) {
+				Log_Printf(LOG_ERROR, "Curl_Read() returned %zd", n);
+				return -EIO;
+			}
+			n += read_size;
+			file->offset += read_size;
+		} while (file->exact_read && n < size);
+#else
 		/*
 		 * Warning : the libupnp API (UpnpOpenHttpGetEx, 
 		 * UpnpReadHttpGet ...) has strange prototypes for length 
@@ -180,16 +229,6 @@ FileBuffer_Read (FileBuffer* file, char* buffer,
 				    file->url, (intmax_t) size, 
 				    (intmax_t) offset);
 			return -EOVERFLOW; // ---------->
-		}
-
-		// Adjust request to file size, if known
-		if (file->file_size >= 0) {
-			if (offset > file->file_size - size) {
-				size = MAX (0, file->file_size - offset);
-				Log_Printf (LOG_DEBUG, 
-					    "GetHttp truncate to size %" 
-					    PRIdMAX, (intmax_t) size);
-			}
 		}
 
 		int rc;
@@ -208,14 +247,14 @@ FileBuffer_Read (FileBuffer* file, char* buffer,
 			rc = UpnpOpenHttpGetEx (file->url, &file->handle,
 						    &contentType, &contentLength,
 						    &httpStatus,
-						    offset, file->file_size,
+						    offset, INT_MAX,
 						    HTTP_DEFAULT_TIMEOUT
 						    );
 			if (rc != UPNP_E_SUCCESS)
 				goto HTTP_CHECK; // ---------->
 			file->offset = offset;
 			freshStream = true;
-			Log_Printf(LOG_DEBUG, "Opened stream: %s", file->url);
+			Log_Printf(LOG_DEBUG, "Opened stream (offset=%i): %s", offset, file->url);
 		}
 
 		/*
@@ -267,6 +306,7 @@ FileBuffer_Read (FileBuffer* file, char* buffer,
 			default:			n = -EIO;    break;
 			}
 		}
+#endif
 	}
 	return n;
 }
@@ -279,7 +319,12 @@ void
 FileBuffer_Close(FileBuffer *file)
 {
 	if (file->url && file->handle) {
+#if USE_CURL
+		Log_Printf (LOG_DEBUG, "Closed %s", file->url);
+		Curl_Close (file->handle);
+#else
 		(void) UpnpCloseHttpGet (file->handle);
+#endif
 	}
 }
 

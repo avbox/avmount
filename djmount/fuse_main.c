@@ -51,7 +51,9 @@
 #include "charset.h"
 #include "minmax.h"
 
-
+#if USE_CURL
+#include "curl_util.h"
+#endif
 
 /*****************************************************************************
  * Configuration related to specific FUSE versions
@@ -495,6 +497,7 @@ stdout_print (Log_Level level, const char* msg)
 	Charset_PrintString (CHARSET_FROM_UTF8, msg, stdout);
 	Log_EndColor (level, stdout);
 	printf ("\n");
+	fflush(stdout);
 }
 
 
@@ -787,6 +790,13 @@ main (int argc, char *argv[])
 		}
 	}
 	
+#if USE_CURL
+	/*
+	 * Initialie cURL
+	 */
+	Curl_Init();
+#endif
+
 	/*
 	 * Initialise UPnP Control point and starts FUSE file system
 	 */

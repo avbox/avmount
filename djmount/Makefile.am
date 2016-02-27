@@ -61,6 +61,9 @@ if !WANT_ICONV
     COMMON_SRCS 	+= charset_internal.c
 endif
 endif
+if WITH_CURL
+    COMMON_SRCS   += curl_util.c
+endif
 
 noinst_HEADERS		= \
 			log.h object.h object_p.h service.h service_p.h \

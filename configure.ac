@@ -23,7 +23,6 @@ AC_CONFIG_HEADERS(config.h)
 AC_COPYRIGHT([Copyright (C) 2005 Rémi Turboult])
 AC_REVISION([$Revision: 266 $])
 
-
 #
 # --enable-FEATURE flags
 # ----------------------
@@ -253,6 +252,17 @@ FUSE_CFLAGS="$FUSE_CFLAGS -DFUSE_USE_VERSION=22"
 
 AM_CONDITIONAL(INTERNAL_LIBUPNP, false)
 
+AC_ARG_WITH([curl],
+	[Use libcurl for streaming])
+AM_CONDITIONAL(WITH_CURL, test x"$with_curl" = xyes)
+if test x"$with_curl" = xyes; then
+	AX_LIB_CURL([7.45.0],,
+		[AC_MSG_ERROR([Your system lacks libcurl >= 7.45.0])])
+	LDFLAGS="$LDFLAGS -lcurl"
+	AC_DEFINE([USE_CURL], 1, [Define to 1 to use libcurl])
+else
+	AC_DEFINE([USE_CURL], 0, [Define to 1 to use libcurl])
+fi
 
 #
 # Output Makefiles
