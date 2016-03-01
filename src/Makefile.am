@@ -39,7 +39,7 @@ if ENABLE_CHARSET
 endif
 
 
-bin_PROGRAMS 		= djmount
+bin_PROGRAMS 		= avmount
 noinst_PROGRAMS		= test_upnp
 
 check_PROGRAMS 		= test_cache test_charset test_device test_ptr_array \
@@ -81,7 +81,7 @@ BUILT_SOURCES		= search_help.h
 search_help.h : ../search_help.txt txt2h.pl
 	$(PERL) $(srcdir)/txt2h.pl $< > $@
 
-djmount_SOURCES		= $(COMMON_SRCS) fuse_main.c
+avmount_SOURCES		= $(COMMON_SRCS) fuse_main.c
 
 test_upnp_SOURCES	= $(COMMON_SRCS) test_upnp.c
 test_upnp_LDADD		= $(LDADD) $(READLINE_LIBS)
@@ -102,34 +102,5 @@ test_vfs_SOURCES	= $(COMMON_SRCS) test_vfs.c
 CLEANFILES		= IUpnpErrFile.txt IUpnpInfoFile.txt
 
 
-if INTERNAL_LIBUPNP
-
-    #
-    # Local install of UPnP headers, to find <upnp/*.h> even when
-    # they are not installed
-    #
-    UPNP_TMPHEADERS	= $(UPNP_TMPINC)/upnp/upnp.h \
-			  $(UPNP_TMPINC)/upnp/ithread.h \
-			  $(UPNP_TMPINC)/upnp/ixml.h
-
-    BUILT_SOURCES	+= $(UPNP_TMPHEADERS)
-
-$(UPNP_TMPHEADERS) :
-	-rm -fr $(UPNP_TMPINC)
-	$(MAKE) -C $(top_builddir)/libupnp install-data \
-		includedir=$(UPNP_TMPINC)
-
-
-clean-local:
-	-rm -fr $(UPNP_TMPINC)
-
-endif
-
-
 EXTRA_DIST		= test_device.sh test_vfs.sh txt2h.pl
-
-
-
-
-
 

@@ -7,10 +7,8 @@
 
 ACLOCAL_AMFLAGS = -I m4 -I gl/m4
 
-CLEANFILES	= IUpnpErrFile.txt IUpnpInfoFile.txt
-
 SUBDIRS 	= gl
-SUBDIRS 	+= djmount
+SUBDIRS 	+= src
 
 EXTRA_DIST	= search_help.txt
 
@@ -26,18 +24,18 @@ AUTOMAKE_OPTIONS = -Wno-override
 # note: do not try to declare all targets together (install install-data ...)
 # or automake will not detect the override.
 install:
-	$(MAKE) $(AM_MAKEFLAGS) -C djmount $@
+	$(MAKE) $(AM_MAKEFLAGS) -C src $@
 install-data:
-	$(MAKE) $(AM_MAKEFLAGS) -C djmount $@
+	$(MAKE) $(AM_MAKEFLAGS) -C src $@
 install-exec:
-	$(MAKE) $(AM_MAKEFLAGS) -C djmount $@
+	$(MAKE) $(AM_MAKEFLAGS) -C src $@
 install-info:
-	$(MAKE) $(AM_MAKEFLAGS) -C djmount $@
+	$(MAKE) $(AM_MAKEFLAGS) -C src $@
 installdirs:
-	$(MAKE) $(AM_MAKEFLAGS) -C djmount $@
+	$(MAKE) $(AM_MAKEFLAGS) -C src $@
 uninstall:
-	$(MAKE) $(AM_MAKEFLAGS) -C djmount $@
+	$(MAKE) $(AM_MAKEFLAGS) -C src $@
 uninstall-info :
-	$(MAKE) $(AM_MAKEFLAGS) -C djmount $@
+	$(MAKE) $(AM_MAKEFLAGS) -C src $@
 
 

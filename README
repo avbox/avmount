@@ -1,22 +1,22 @@
 
-djmount
+avmount
 =======
 
-djmount - mount MediaServers content as a Linux filesystem.
+avmount - mount MediaServers content as a Linux filesystem.
 Created 23/04/2005, Rémi Turboult <r3mi@users.sourceforge.net>
 
 
-djmount is a UPnP AV client. It mounts as a Linux filesystem (using FUSE)
+avmount is a UPnP AV client. It mounts as a Linux filesystem (using FUSE)
 the media content of compatible UPnP AV devices (see "Known Compatible Devices"
 paragraph below).
 
-djmount discovers automatically all UPnP AV Media Servers on the network,
+avmount discovers automatically all UPnP AV Media Servers on the network,
 and make the content available in a directory tree. All shared files 
 (e.g. Audio or Video files) are directly visible and can be played using 
 your favorite media player.
 
 
-djmount is free software, licensed under the terms of the GNU General Public
+avmount is free software, licensed under the terms of the GNU General Public
 License (GNU GPL : see "COPYING" file) : see details in "Copyright and 
 Licenses" paragraph below.
 
@@ -27,7 +27,7 @@ Example 1 : browsing
 (the actual files listed depend on your AV files collection ! Also, the 
 directory structure is different for each kind of Media Server)
 
-$ djmount /mnt/av
+$ avmount /mnt/av
 
 $ cd /mnt/av
 
@@ -62,7 +62,7 @@ Example 2 : searching
 
 (again, the actual content listed depends on your AV files collection !)
 
-$ djmount /mnt/av
+$ avmount /mnt/av
 
 $ cd /mnt/av
 
@@ -253,9 +253,6 @@ Troubleshooting
   (e.g. Windows Media Connect on Windows XP), most of them don't do it 
   (e.g. AV Media Server in Intel Tools).
 
-* currently, files larger than 2 Gb can not be displayed correctly : as a 
-  workaround, they are always listed inside "playlists".
-
 * in some distributions (e.g. Debian Sarge), djmount (and more generally, 
   FUSE-based file systems) work fine from the command line, but is unbrowsable
   by Nautilus (Gnome) or Konqueror (KDE) : clicking on a directory causes 
@@ -283,13 +280,12 @@ This project uses the following main libraries :
 
 * the FUSE package ( http://fuse.sourceforge.net/ ), 
 
+* the cURL Library ( https://curl.haxx.se/ ),
+
 * the Linux SDK for UPnP Devices (libupnp), initially created by Intel:
-  http://upnp.sourceforge.net/ .
-  "djmount" is bundled with a copy of this library (in the "libupnp" 
-  directory), with some mandatory patches.
+  http://upnp.sourceforge.net/.
 
 * the "talloc" library : http://talloc.samba.org/
-  "djmount" is bundled with a copy of this library, for convenience.
 
 * for testing only (test_upnp executable) : "readline" library (optionnal)
 
@@ -304,7 +300,8 @@ Copyright and Licenses
 djmount is free software :
 
 
-* "djmount" is (C) Copyright 2005-2006 Rémi Turboult.
+* "avmount" is (C) Copyright 2005-2006 Rémi Turboult.
+               (C) Copyright 2016 Fernando Rodriguez
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -319,18 +316,6 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
-
-
-* The "libupnp" directory contains the Linux SDK for UPnP Devices :
-  Copyright (c) 2000-2003 Intel Corporation
-
-This software is licensed under the terms of a modified BSD license,
-compatible with the GNU GPL : see libupnp/LICENSE file.
-
-
-* The "talloc" library is Copyright (C) Andrew Tridgell 2004-2005
-
-This software is licensed under the terms of the GNU General Public License.
 
 
 * The source code of this project may contain files from other projects, 

@@ -14,7 +14,7 @@ AC_INIT(djmount, 0.71, r3mi@users.sourceforge.net)
 AC_CONFIG_MACRO_DIR(m4)
 AC_CONFIG_MACRO_DIR(gl/m4)
 
-AC_CONFIG_SRCDIR(djmount/djfs.c)
+AC_CONFIG_SRCDIR(src/djfs.c)
 
 AM_INIT_AUTOMAKE([1.9 -Wall std-options gnu])
 
@@ -270,12 +270,8 @@ fi
 
 AC_CONFIG_FILES([Makefile
 		 gl/Makefile
-                 djmount/Makefile
+                 src/Makefile
                  ])
-
-if test x"$with_external_talloc" != xyes; then
-	AC_CONFIG_FILES([talloc/Makefile])
-fi
 
 AC_OUTPUT
 
