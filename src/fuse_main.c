@@ -479,25 +479,27 @@ static struct fuse_operations fs_oper = {
  *
  *****************************************************************************/
 
+static FILE *logf = NULL;
+
 static void
 stdout_print (Log_Level level, const char* msg)
 {
-	Log_BeginColor (level, stdout);
+	Log_BeginColor (level, logf);
 	switch (level) {
-	case LOG_ERROR:		printf ("[E] "); break;
-	case LOG_WARNING:	printf ("[W] "); break;
-	case LOG_INFO:		printf ("[I] "); break;
-	case LOG_DEBUG:		printf ("[D] "); break;
+	case LOG_ERROR:		fprintf (logf, "[E] "); break;
+	case LOG_WARNING:	fprintf (logf, "[W] "); break;
+	case LOG_INFO:		fprintf (logf, "[I] "); break;
+	case LOG_DEBUG:		fprintf (logf, "[D] "); break;
 	default:
-		printf ("[%d] ", (int) level);
+		fprintf (logf, "[%d] ", (int) level);
 		break;
 	}
 	
 	// Convert message to display charset, and print
-	Charset_PrintString (CHARSET_FROM_UTF8, msg, stdout);
-	Log_EndColor (level, stdout);
-	printf ("\n");
-	fflush(stdout);
+	Charset_PrintString (CHARSET_FROM_UTF8, msg, logf);
+	Log_EndColor (level, logf);
+	fprintf (logf, "\n");
+	fflush(logf);
 }
 
 
@@ -613,6 +615,25 @@ main (int argc, char *argv[])
 	// Create a working context for temporary strings
 	void* const tmp_ctx = talloc_autofree_context();
 
+	for (rc = 0; rc < argc; rc++) {
+		if (!strcmp(argv[rc], "-l")) {
+			if ((rc + 1) >= argc) {
+				bad_usage(argv[0], "option -l must be followed by a filename");
+				return -1;
+			}
+			logf = fopen(argv[rc + 1], "a+");
+			if (logf == NULL) {
+				fprintf(stderr, "Could not open %s", argv[rc + 1]);
+				return -1;
+			}
+			fprintf(logf, "Begin logging...\n");
+			fflush(logf);
+		}
+	}
+	if (logf == NULL) {
+		logf = stdout;
+	}
+
 	rc = Log_Initialize (stdout_print);
 	if (rc != 0) {
 		fprintf (stderr, "%s : Error initialising Logger", argv[0]);
@@ -644,7 +665,11 @@ main (int argc, char *argv[])
 	while ((o = argv[opt++])) {
 		if (strcmp (o, "-h") == 0 || strcmp (o, "--help") == 0) {
 			usage (stdout, argv[0]); // ---------->
-			
+
+		} else if (strcmp (o, "-l") == 0) {
+			opt++;
+			continue;
+
 		} else if (strcmp (o, "--version") == 0) {
 			version (stdout, argv[0]); // ---------->
 			
@@ -703,7 +728,7 @@ main (int argc, char *argv[])
 				} else if (strcmp (s, "leakfull") == 0) {
 					talloc_enable_leak_report_full();
 				} else if (strcmp (s, "fuse") == 0) {
-					FUSE_ARG ("-d");
+					/* FUSE_ARG ("-d"); */
 				} else if (strcmp (s, "debug") == 0) {
 					Log_SetMaxLevel (LOG_DEBUG);
 				} else if (strcmp (s, "info") == 0) {
