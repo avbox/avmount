@@ -819,7 +819,7 @@ main (int argc, char *argv[])
 	/*
 	 * Initialie cURL
 	 */
-	Curl_Init();
+	CurlUtil_Init();
 #endif
 
 	/*

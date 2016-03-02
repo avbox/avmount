@@ -30,22 +30,26 @@
 #include "log.h"
 #include "minmax.h"
 
-#define ENABLE_READAHEAD (1)
-#define READAHEAD_BUFFER_SIZE	(1024*1024*4)
+#define ENABLE_READAHEAD 			(1)
+#define READAHEAD_BUFSZ_MAX		(1024 * 1024 * 10)
+#define READAHEAD_BUFSZ_STEP	(1024 * 512)
 #define READAHEAD_CHUNK_SIZE	(1024 * 32)
+#define READAHEAD_TRESHOLD		(5)
 
 #if ENABLE_READAHEAD
 #include <pthread.h>
 #include <sys/mman.h>
 #endif
 
-struct _Curl_File
+/* cURL file handle */
+struct _CurlUtil_File
 {
 	CURL*  handle;
 	CURLM* multi_handle;
 	int    connected;
 
 	char*  buf;
+	char*  ptr;
 	size_t bufsz;
 	size_t bufcnt;
 
@@ -61,27 +65,30 @@ struct _Curl_File
 	int             ra_running;
 	unsigned int    ra_reads;
 	int             ra_abort;
+	int             ra_growbuf;
+	const char*     ra_bufend;
 #endif
 };
 
-typedef struct _Curl_File Curl_File;
+typedef struct _CurlUtil_File CurlUtil_File;
 
-struct _Curl_CallbackData
+/* curl callback structure */
+struct _CurlUtil_CallbackData
 {
 	char* buf;
 	size_t avail;
 	size_t rem;
-	Curl_File *file;
+	CurlUtil_File *file;
 };
 
 /**
- * Curl_WriteCallback() -- cURL callback routine
+ * CurlUtil_WriteCallback() -- cURL callback routine
  */
 static size_t
-Curl_WriteCallback(char *buffer, size_t size, size_t nitems, void *userp)
+CurlUtil_WriteCallback(char *buffer, size_t size, size_t nitems, void *userp)
 {
-	struct _Curl_CallbackData *cbdata = (struct _Curl_CallbackData*) userp;
-	Curl_File *file = cbdata->file;
+	struct _CurlUtil_CallbackData *cbdata = (struct _CurlUtil_CallbackData*) userp;
+	CurlUtil_File *file = cbdata->file;
 	size_t bytes_to_copy;
 	size_t sz = (size = (size * nitems));
 
@@ -109,6 +116,11 @@ Curl_WriteCallback(char *buffer, size_t size, size_t nitems, void *userp)
 				size -= (sz - avail_buf);
 				sz = avail_buf;
 			} else {
+				if (file->buf == NULL) {
+					file->ptr = newbuf;
+				} else {
+					file->ptr = newbuf + (file->ptr - file->buf);
+				}
 				file->buf = newbuf;
 				file->bufsz += needed_buf;
 			}
@@ -120,15 +132,15 @@ Curl_WriteCallback(char *buffer, size_t size, size_t nitems, void *userp)
 }
 
 /**
- * Curl_FillBuffer() -- Attempt to fill buffer with streamed data
+ * CurlUtil_FillBuffer() -- Attempt to fill buffer with streamed data
  */
 static size_t
-Curl_FillBuffer(Curl_File *file, char *buffer, size_t size)
+CurlUtil_FillBuffer(CurlUtil_File *file, char *buffer, size_t size)
 {
 	CURLMcode mc;
 	fd_set fdread, fdwrite, fdexcep;
 	struct timeval timeout;
-	struct _Curl_CallbackData cbdata;
+	struct _CurlUtil_CallbackData cbdata;
 	int rc;
 	int still_running = 0;
 
@@ -141,14 +153,19 @@ Curl_FillBuffer(Curl_File *file, char *buffer, size_t size)
 	/* if we got data in the buffer use it first */
 	if (file->bufcnt && cbdata.rem) {
 		size_t bytes_to_copy = MIN(file->bufcnt, cbdata.rem);
-		memcpy(cbdata.buf, file->buf, bytes_to_copy);
+		memcpy(cbdata.buf, file->ptr, bytes_to_copy);
 		cbdata.avail += bytes_to_copy;
 		cbdata.rem -= bytes_to_copy;
 		file->bufcnt -= bytes_to_copy;
+		file->ptr += bytes_to_copy;
 		if (cbdata.rem == 0) {
 			return cbdata.avail;
 		}
 	}
+
+	/* if we're here then the buffer is empty 
+	 * so we need to reset the buffer pointer */
+	file->ptr = file->buf;
 
 	/*
 	 * if the connection has not been established
@@ -181,7 +198,6 @@ Curl_FillBuffer(Curl_File *file, char *buffer, size_t size)
 		/* set a suitable timeout to fail on */
 		timeout.tv_sec = 60;
 		timeout.tv_usec = 0;
-
 		curl_multi_timeout(file->multi_handle, &curl_timeo);
 		if(curl_timeo >= 0) {
 			timeout.tv_sec = curl_timeo / 1000;
@@ -201,7 +217,7 @@ Curl_FillBuffer(Curl_File *file, char *buffer, size_t size)
 
 		if (maxfd == -1) {
 			usleep(100 * 1000);
-			rc = -1;
+			continue;
 		} else {
 			rc = select(maxfd+1, &fdread, &fdwrite, &fdexcep, &timeout);
 		}
@@ -217,25 +233,25 @@ Curl_FillBuffer(Curl_File *file, char *buffer, size_t size)
 }
 
 /**
- * Curl_Init()
+ * CurlUtil_Init()
  */
 void
-Curl_Init()
+CurlUtil_Init()
 {
 	curl_global_init(CURL_GLOBAL_DEFAULT);
 }
 
 /**
- * Curl_Open()
+ * CurlUtil_Open()
  */
-Curl_File*
-Curl_Open(const char *url)
+CurlUtil_File*
+CurlUtil_Open(const char *url)
 {
-	Curl_File *file;
+	CurlUtil_File *file;
 
-	Log_Printf(LOG_DEBUG, "Curl_Open(%s)", url);
+	Log_Printf(LOG_DEBUG, "CurlUtil_Open(%s)", url);
 
-	if ((file = malloc(sizeof(Curl_File))) == NULL) {
+	if ((file = malloc(sizeof(CurlUtil_File))) == NULL) {
 		Log_Printf(LOG_ERROR, "malloc() failed");
 		return NULL;
 	}
@@ -265,33 +281,43 @@ Curl_Open(const char *url)
 	curl_easy_setopt (file->handle, CURLOPT_URL, url);
 	curl_easy_setopt (file->handle, CURLOPT_VERBOSE, 0L);
 	curl_easy_setopt (file->handle, CURLOPT_NOSIGNAL, 1L);
-	curl_easy_setopt (file->handle, CURLOPT_WRITEFUNCTION, Curl_WriteCallback);
-	curl_easy_setopt (file->handle, CURLOPT_USERAGENT, "djmount/0.71");
+	curl_easy_setopt (file->handle, CURLOPT_WRITEFUNCTION, CurlUtil_WriteCallback);
+	curl_easy_setopt (file->handle, CURLOPT_USERAGENT, "avmount/0.8");
 	curl_multi_add_handle(file->multi_handle, file->handle);
 	return file;
 }
 
 /**
- * Curl_Seek()
+ * CurlUtil_Seek()
  */
 void
-Curl_Seek(Curl_File *file, off_t offset)
+CurlUtil_Seek(CurlUtil_File *file, off_t offset)
 {
-	Log_Printf(LOG_DEBUG, "Curl_Seek(%lx, %zd)",
+	Log_Printf(LOG_DEBUG, "CurlUtil_Seek(%lx, %zd)",
 		(unsigned long) file, offset);
+
+#if 0
+	Log_Printf(LOG_ERROR, "CurlUtil_Seek: running=%i seekto=%zd abort=%i",
+		file->ra_running, file->ra_seekto, file->ra_abort);
+#endif
 
 #if ENABLE_READAHEAD
 	if (file->ra_running) {
 		pthread_mutex_lock(&file->ra_lock);
-		file->ra_seekto = offset;
-		pthread_cond_signal(&file->ra_signal);
-		pthread_mutex_unlock(&file->ra_lock);
-		while (file->ra_seekto != -1) {
-			pthread_mutex_lock(&file->ra_lock);
-			pthread_cond_wait(&file->ra_signal, &file->ra_lock);
+		if (file->ra_running) {
+			file->ra_abort = 1;
+			file->ra_seekto = offset;
+			pthread_cond_signal(&file->ra_signal);
+			pthread_mutex_unlock(&file->ra_lock);
+			while (file->ra_seekto != -1) {
+				pthread_mutex_lock(&file->ra_lock);
+				pthread_cond_wait(&file->ra_signal, &file->ra_lock);
+				pthread_mutex_unlock(&file->ra_lock);
+			}
+			return;
+		} else {
 			pthread_mutex_unlock(&file->ra_lock);
 		}
-		return;
 	}
 #endif
 
@@ -304,51 +330,49 @@ Curl_Seek(Curl_File *file, off_t offset)
 
 #if ENABLE_READAHEAD
 static void*
-Curl_ReadAhead(void *f)
+CurlUtil_ReadAhead(void *f)
 {
 	char *ptr;
-	Curl_File *file = (Curl_File*) f;
+	CurlUtil_File *file = (CurlUtil_File*) f;
 
 	if (file->ra_buf == NULL) {
-		//file->ra_buf = mmap(NULL, READAHEAD_BUFFER_SIZE,
-		//	PROT_READ | PROT_WRITE, MAP_ANONYMOUS,-1, 0);
-		file->ra_buf = malloc(READAHEAD_BUFFER_SIZE);
+		file->ra_buf = mmap(NULL, READAHEAD_BUFSZ_MAX,
+			PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 		if (file->ra_buf == NULL) {
-			Log_Printf(LOG_ERROR, "Curl_ReadAhead() -- malloc() failed");
+			Log_Printf(LOG_ERROR, "CurlUtil_ReadAhead() -- malloc() failed");
 			goto THREAD_EXIT;
 		}
+		file->ra_bufend = file->ra_buf + READAHEAD_BUFSZ_STEP;
 	}
 
-READAHEAD_START:
-	ptr = file->ra_buf;
-	file->ra_running = 1;
-	file->ra_ptr = file->ra_buf;
-	file->ra_avail = 0;
-	file->ra_seekto = -1;
+#define READAHEAD_INIT() \
+	ptr = file->ra_buf; \
+	file->ra_running = 1; \
+	file->ra_ptr = file->ra_buf; \
+	file->ra_avail = 0; \
+	file->ra_seekto = -1; \
+	file->ra_growbuf = 0; \
+	file->ra_abort = 0; \
+	file->ra_reads = 0;
+	READAHEAD_INIT();
 
+READAHEAD_START:
 	/* signal that we're up and running */
 	pthread_mutex_lock(&file->ra_lock);
 	pthread_cond_signal(&file->ra_signal);
 	pthread_mutex_unlock(&file->ra_lock);
 
 	while (!file->ra_abort) {
-		char * const bufend = (file->ra_buf + READAHEAD_BUFFER_SIZE);
 		size_t chunksz;
 		size_t bytes_read;
 
-		if (file->ra_seekto != -1) {
-			file->ra_running = 0;
-			Curl_Seek(file, file->ra_seekto);
-			file->ra_running = 1;
-			goto READAHEAD_START;
-		}
-
 		/* calculate the size of the next chunk */
 #define CALC_CHUNKSZ() \
-		chunksz = READAHEAD_BUFFER_SIZE - file->ra_avail; \
-		chunksz = MIN((bufend - ptr), chunksz); \
+		chunksz = (file->ra_bufend - file->ra_buf) - file->ra_avail; \
+		chunksz = MIN((file->ra_bufend - ptr), chunksz); \
 		chunksz = MIN(READAHEAD_CHUNK_SIZE, chunksz); \
-		chunksz = (file->ra_reads < 5) ? MIN(file->ra_wants, chunksz) : chunksz;
+		chunksz = (file->ra_reads < READAHEAD_TRESHOLD) ? \
+			MIN(file->ra_wants, chunksz) : chunksz;
 		CALC_CHUNKSZ();
 
 		/* if no chunk is needed wait until signaled */
@@ -365,49 +389,77 @@ READAHEAD_START:
 		}
 #undef CALC_CHUNKSZ
 
-		if ((bytes_read = Curl_FillBuffer(file, ptr, chunksz)) == -1) {
+		/* read the chunk */
+		if ((bytes_read = CurlUtil_FillBuffer(file, ptr, chunksz)) == -1) {
 			goto THREAD_EXIT;
 		}
-
 		if (bytes_read) {
+			if ((ptr = (ptr + bytes_read)) == file->ra_bufend) {
+				if ((file->ra_bufend < (file->ra_buf + READAHEAD_BUFSZ_MAX)) && file->ra_growbuf) {
+					file->ra_bufend += READAHEAD_BUFSZ_STEP;
+					file->ra_growbuf = 0;
+					assert(file->ra_bufend <= (file->ra_buf + READAHEAD_BUFSZ_MAX));
+				} else {
+					ptr = file->ra_buf;
+				}
+			}
 			pthread_mutex_lock(&file->ra_lock);
 			file->ra_avail += bytes_read;
 			pthread_cond_signal(&file->ra_signal);
 			pthread_mutex_unlock(&file->ra_lock);
-			if ((ptr = (ptr + bytes_read)) == bufend) {
-				ptr = file->ra_buf;
-			}
 		}
 
 #if 0
-		Log_Printf(LOG_ERROR, "Curl_ReadAhead(%lx): W: %zd | R: %zd | A: %zd",
+		Log_Printf(LOG_ERROR, "CurlUtil_ReadAhead(%lx): W: %zd | R: %zd | A: %zd",
 			(unsigned long) file, file->ra_wants, chunksz, file->ra_avail);
 #endif
 	}
 
 THREAD_EXIT:
-	Log_Printf(LOG_DEBUG, "Curl_ReadAhead(%lx): Thread exited | abort=%i",
+	pthread_mutex_lock(&file->ra_lock);
+
+	/* if a seek was requested call CurlUtil_Seek() and
+	 * return to the top of the loop */
+	if (file->ra_seekto != -1) {
+		Log_Printf(LOG_DEBUG, "CurlUtil_ReadAhead: Seeking to %zd",
+			file->ra_seekto);
+		file->ra_running = 0;
+		CurlUtil_Seek(file, file->ra_seekto);
+		READAHEAD_INIT();
+		pthread_mutex_unlock(&file->ra_lock);
+		goto READAHEAD_START;
+	}
+
+	Log_Printf(LOG_DEBUG, "CurlUtil_ReadAhead(%lx): Thread exited | abort=%i",
 		(unsigned long) file, file->ra_abort);
 
 	file->ra_abort = 0;
 	file->ra_running = 0;
 	file->ra_reads = 0;
+	pthread_cond_signal(&file->ra_signal);
+	pthread_mutex_unlock(&file->ra_lock);
+
 	return NULL;
 }
+#undef READAHEAD_INIT
 #endif
 
 /**
- * Curl_Read()
+ * CurlUtil_Read()
  */
 size_t
-Curl_Read(Curl_File *file, void *ptr, size_t size)
+CurlUtil_Read(CurlUtil_File *file, void *ptr, size_t size)
 {
+	Log_Printf(LOG_DEBUG, "CurlUtil_Read(%lx, %lx, %zd)",
+		(unsigned long) file, (unsigned long) ptr, size);
+
 	if (size == 0) {
 		return 0;
 	}
 #if ENABLE_READAHEAD
 
 	size_t bytes_read = 0;
+	/* unsigned int waits = 0; */
 
 	/* signal worker that we want data */
 	pthread_mutex_lock(&file->ra_lock);
@@ -419,8 +471,8 @@ Curl_Read(Curl_File *file, void *ptr, size_t size)
 	if (!file->ra_running) {
 		assert(file->ra_abort == 0);
 		pthread_mutex_lock(&file->ra_lock);
-		if (pthread_create(&file->ra_thread, NULL, Curl_ReadAhead, (void*) file)) {
-			Log_Printf(LOG_ERROR, "Curl_Read() -- pthread_create() failed!");
+		if (pthread_create(&file->ra_thread, NULL, CurlUtil_ReadAhead, (void*) file)) {
+			Log_Printf(LOG_ERROR, "CurlUtil_Read() -- pthread_create() failed!");
 			return -1;
 		}
 		pthread_cond_wait(&file->ra_signal, &file->ra_lock);
@@ -428,12 +480,11 @@ Curl_Read(Curl_File *file, void *ptr, size_t size)
 	}
 
 	while (bytes_read < size) {
-		const char * const bufend = (file->ra_buf + READAHEAD_BUFFER_SIZE);
 		size_t chunksz;
 
 #define CALC_CHUNKSZ() \
 		chunksz = MIN(size - bytes_read, file->ra_avail); \
-		chunksz = MIN(bufend - file->ra_ptr, chunksz)
+		chunksz = MIN(file->ra_bufend - file->ra_ptr, chunksz)
 		CALC_CHUNKSZ();
 
 		/* wait until there's data available */
@@ -446,11 +497,25 @@ Curl_Read(Curl_File *file, void *ptr, size_t size)
 					Log_Printf(LOG_ERROR, "Requested %zd but got %zd", size, bytes_read);
 					return bytes_read;
 				}
-				if (file->ra_reads > 10) {
-					Log_Printf(LOG_ERROR, "Curl_Read: Waiting for data!");
+				if (file->ra_reads > READAHEAD_TRESHOLD) {
+					Log_Printf(LOG_DEBUG, "CurlUtil_Read(%lx): Waiting for data!",
+						(unsigned long) file);
+					if (file->ra_growbuf == 0) {
+						file->ra_growbuf = 1;
+					}
+					pthread_cond_wait(&file->ra_signal, &file->ra_lock);
+					pthread_mutex_unlock(&file->ra_lock);
+
+					/* wait for buffer to be full */
+					while (file->ra_avail < (file->ra_bufend - file->ra_buf)) {
+						pthread_mutex_lock(&file->ra_lock);
+						pthread_cond_wait(&file->ra_signal, &file->ra_lock);
+						pthread_mutex_unlock(&file->ra_lock);
+					}
+				} else {
+					pthread_cond_wait(&file->ra_signal, &file->ra_lock);
+					pthread_mutex_unlock(&file->ra_lock);
 				}
-				pthread_cond_wait(&file->ra_signal, &file->ra_lock);
-				pthread_mutex_unlock(&file->ra_lock);
 				continue;
 			} else {
 				pthread_mutex_unlock(&file->ra_lock);
@@ -462,7 +527,7 @@ Curl_Read(Curl_File *file, void *ptr, size_t size)
 		memcpy(ptr, file->ra_ptr, chunksz);
 		ptr += chunksz;
 		bytes_read += chunksz;
-		if ((file->ra_ptr = (file->ra_ptr + chunksz)) == bufend) {
+		if ((file->ra_ptr = (file->ra_ptr + chunksz)) == file->ra_bufend) {
 			file->ra_ptr = file->ra_buf;
 		}
 
@@ -476,15 +541,15 @@ Curl_Read(Curl_File *file, void *ptr, size_t size)
 		assert(file->ra_wants == (size - bytes_read));
 
 #if 0
-		Log_Printf(LOG_DEBUG, "Curl_Read(%lx, %zd, %zd): +%zd | %zd",
-			(unsigned long) file, ptr, size, chunksz, bytes_read);
+		Log_Printf(LOG_ERROR, "CurlUtil_Read(%lx, %lx, %zd): +%zd | %zd",
+			(unsigned long) file, (unsigned long) ptr, size, chunksz, bytes_read);
 #endif
 	}
 	file->ra_reads++;
 	return bytes_read;
 #else
 	size_t bytes_read;
-	if ((bytes_read = Curl_FillBuffer(file, ptr, size)) == -1) {
+	if ((bytes_read = CurlUtil_FillBuffer(file, ptr, size)) == -1) {
 		return -1;
 	}
 	if (bytes_read < size) {
@@ -495,15 +560,18 @@ Curl_Read(Curl_File *file, void *ptr, size_t size)
 }
 
 /**
- * Curl_Close()
+ * CurlUtil_Close()
  */
 void
-Curl_Close(Curl_File *file)
+CurlUtil_Close(CurlUtil_File *file)
 {
-	Log_Printf(LOG_DEBUG, "Curl_Close(%lx)", (unsigned long) file);
-	Log_Printf(LOG_DEBUG, "Curl buf size: %zd", file->bufsz);
+	Log_Printf(LOG_DEBUG, "CurlUtil_Close(%lx)", (unsigned long) file);
+	Log_Printf(LOG_DEBUG, "CurlUtil: Buffer size: %zd", file->bufsz);
 
 #if ENABLE_READAHEAD
+	Log_Printf(LOG_DEBUG, "CurlUtil: Readahead buffer size: %zd",
+		(file->ra_bufend - file->ra_buf));
+
 	if (file->ra_running) {
 		pthread_mutex_lock(&file->ra_lock);
 		file->ra_abort = 1;
@@ -513,7 +581,7 @@ Curl_Close(Curl_File *file)
 		assert(file->ra_abort == 0);
 	}
 	if (file->ra_buf != NULL) {
-		free(file->ra_buf);
+		munmap(file->ra_buf, READAHEAD_BUFSZ_MAX);
 	}
 #endif
 

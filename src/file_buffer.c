@@ -54,7 +54,7 @@ struct _FileBuffer {
 	const char*	content;
 	off_t	     	offset;
 #if USE_CURL
-	Curl_File*  handle;
+	CurlUtil_File*  handle;
 #else
 	void*		    handle;
 #endif
@@ -167,12 +167,6 @@ FileBuffer_Read (FileBuffer* file, char* buffer,
 		 * Read from URL
 		 */
 
-		Log_Printf (LOG_DEBUG, 
-			    "GetHttp url '%s' size %" PRIdMAX 
-			    " offset %" PRIdMAX " (file_size %" PRIdMAX ")",
-			    file->url, (intmax_t) size, (intmax_t) offset,
-			    (intmax_t) file->file_size);
-
 		// Adjust request to file size, if known
 		if (file->file_size >= 0) {
 			if (offset > file->file_size) {
@@ -193,7 +187,7 @@ FileBuffer_Read (FileBuffer* file, char* buffer,
 #if USE_CURL
 		if (file->handle == NULL) {
 			Log_Printf(LOG_DEBUG, "Opening %s", file->url);
-			file->handle = Curl_Open(file->url);
+			file->handle = CurlUtil_Open(file->url);
 			file->offset = 0;
 			if (file->handle == NULL) {
 				Log_Printf(LOG_ERROR, "curl_open() failed");
@@ -201,21 +195,24 @@ FileBuffer_Read (FileBuffer* file, char* buffer,
 			}
 		}
 		if (file->offset != offset) {
-			Log_Printf(LOG_DEBUG, "Adjusting offset to %zd from %zd",
-				offset, file->offset);
-			Curl_Seek(file->handle, offset);
+			CurlUtil_Seek(file->handle, offset);
 			file->offset = offset;
 		}
 		do {
 			size_t read_size = size - n;
-			if ((read_size = Curl_Read(file->handle, buffer, read_size)) < 0) {
-				Log_Printf(LOG_ERROR, "Curl_Read() returned %zd", n);
+			if ((read_size = CurlUtil_Read(file->handle, buffer, read_size)) < 0) {
+				Log_Printf(LOG_ERROR, "CurlUtil_Read() returned %zd", n);
 				return -EIO;
 			}
 			n += read_size;
 			file->offset += read_size;
 		} while (file->exact_read && n < size);
 #else
+		Log_Printf (LOG_DEBUG, "GetHttp url '%s' size %" PRIdMAX
+			    " offset %" PRIdMAX " (file_size %" PRIdMAX ")",
+			    file->url, (intmax_t) size, (intmax_t) offset,
+			    (intmax_t) file->file_size);
+
 		/*
 		 * Warning : the libupnp API (UpnpOpenHttpGetEx, 
 		 * UpnpReadHttpGet ...) has strange prototypes for length 
@@ -321,7 +318,7 @@ FileBuffer_Close(FileBuffer *file)
 	if (file->url && file->handle) {
 #if USE_CURL
 		Log_Printf (LOG_DEBUG, "Closed %s", file->url);
-		Curl_Close (file->handle);
+		CurlUtil_Close (file->handle);
 #else
 		(void) UpnpCloseHttpGet (file->handle);
 #endif

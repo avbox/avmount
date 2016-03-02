@@ -25,36 +25,36 @@
 /**
  * File handle structure
  */
-typedef struct _Curl_File Curl_File;
+typedef struct _CurlUtil_File CurlUtil_File;
 
 /**
  * Initialize the cURL library.
  */
 void
-Curl_Init();
+CurlUtil_Init();
 
 /**
  * Opens a URL for streaming
  */
-Curl_File*
-Curl_Open(const char *url);
+CurlUtil_File*
+CurlUtil_Open(const char *url);
 
 /**
  * Reads data from a network stream
  */
 size_t
-Curl_Read(Curl_File *file, void *ptr, size_t size);
+CurlUtil_Read(CurlUtil_File *file, void *ptr, size_t size);
 
 /**
  * Seek the network stream
  */
 void
-Curl_Seek(Curl_File *file, off_t offset);
+CurlUtil_Seek(CurlUtil_File *file, off_t offset);
 
 /**
  * Closes a URL
  */
 void
-Curl_Close(Curl_File *file);
+CurlUtil_Close(CurlUtil_File *file);
 
 #endif
