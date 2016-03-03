@@ -130,6 +130,8 @@ char*
 Device_GetStatusString (const Device* dev, void* result_context,
 			bool debug);
 
+const char*
+Device_GetDescDocURL(const Device *dev);
 
 
 #ifdef __cplusplus

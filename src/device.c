@@ -455,4 +455,8 @@ Device_GetStatusString (const Device* dev, void* result_context, bool debug)
 	return p;
 }
 
-
+const char*
+Device_GetDescDocURL(const Device *dev)
+{
+  return dev->descDocURL;
+}

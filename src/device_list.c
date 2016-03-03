@@ -902,16 +902,30 @@ VerifyTimeouts (int incr)
     DeviceNode* devnode = node->item;
     devnode->expires -= incr;
     if (devnode->expires <= 0) {
-      /*
-       * This advertisement has expired, so we should remove the device
-       * from the list 
-       */
-      Log_Printf (LOG_DEBUG, "Remove expired device Id=%s", devnode->deviceId);
-      node->item = 0;
-      ListDelNode (&GlobalDeviceList, node, /*freeItem=>*/ 0);
-      // Do the notification while the global list is locked
-      NotifyUpdate (E_DEVICE_REMOVED, devnode);
-      talloc_free (devnode);
+
+      char *descDocText;
+			const char *descDocURL = Device_GetDescDocURL(devnode->d);
+      char content_type[LINE_SIZE];
+      int rc = UpnpDownloadUrlItem (descDocURL, &descDocText,
+        content_type);
+      if (rc != UPNP_E_SUCCESS) {
+        /*
+         * This advertisement has expired, so we should remove the device
+         * from the list
+         */
+        Log_Printf (LOG_DEBUG, "Remove expired device Id=%s", devnode->deviceId);
+        node->item = 0;
+        ListDelNode (&GlobalDeviceList, node, /*freeItem=>*/ 0);
+        // Do the notification while the global list is locked
+        NotifyUpdate (E_DEVICE_REMOVED, devnode);
+        talloc_free (devnode);
+      } else {
+				/* TODO: Should we check that descDocText hasn't changed
+				 * and update it if it has?
+				 */
+        free(descDocText);
+				devnode->expires = 60;
+      }
     }
   }
   ithread_mutex_unlock (&DeviceListMutex);
