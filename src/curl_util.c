@@ -30,10 +30,14 @@
 #include "log.h"
 #include "minmax.h"
 
+#define MB 										(1024 * 1024)
+#define KB										(1024)
+
 #define ENABLE_READAHEAD 			(1)
-#define READAHEAD_BUFSZ_MAX		(1024 * 1024 * 10)
-#define READAHEAD_BUFSZ_STEP	(1024 * 512)
-#define READAHEAD_CHUNK_SIZE	(1024 * 32)
+#define READAHEAD_BUFSZ_START (64 * KB)
+#define READAHEAD_BUFSZ_STEP	( 2 * MB)
+#define READAHEAD_BUFSZ_MAX		((10 * MB) + READAHEAD_BUFSZ_START)
+#define READAHEAD_CHUNK_SIZE	(8 * KB)
 #define READAHEAD_TRESHOLD		(5)
 
 #if ENABLE_READAHEAD
@@ -348,7 +352,7 @@ CurlUtil_ReadAhead(void *f)
 			Log_Printf(LOG_ERROR, "CurlUtil_ReadAhead() -- malloc() failed");
 			goto THREAD_EXIT;
 		}
-		file->ra_bufend = file->ra_buf + READAHEAD_BUFSZ_STEP;
+		file->ra_bufend = file->ra_buf + READAHEAD_BUFSZ_START;
 	}
 
 #define READAHEAD_INIT() \
