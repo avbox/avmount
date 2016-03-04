@@ -32,6 +32,8 @@ AC_ARG_ENABLE([debug], [extra debugging code])
 AM_CONDITIONAL(ENABLE_DEBUG, test x"$enable_debug" = xyes)
 if test x"$enable_debug" = xyes; then
 	AC_DEFINE([DEBUG],1,[Define to 1 to compile debug code])
+else
+	AC_DEFINE([NDEBUG],1,[Define to 1  to disable debug code])
 fi
 
 AC_ARG_ENABLE([charset],
@@ -69,7 +71,7 @@ export PKG_CONFIG_PATH=$PKG_CONFIG_PATH:/usr/local/lib/pkgconfig
 #
 if test x"$enable_debug" = xyes; then
 	# AC_PROG_CC already sets CFLAGS to "-g -O2" by default
-	:
+	CFLAGS="$CFLAGS -ggdb"
 else
 	# add optimise for size
 	CFLAGS="$CFLAGS -Os"
