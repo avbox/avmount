@@ -52,6 +52,7 @@ struct _CurlUtil_File
 	char*  ptr;
 	size_t bufsz;
 	size_t bufcnt;
+	size_t offset;
 
 #if ENABLE_READAHEAD
 	pthread_t       ra_thread;
@@ -166,6 +167,7 @@ CurlUtil_FillBuffer(CurlUtil_File *file, char *buffer, size_t size)
 	/* if we're here then the buffer is empty 
 	 * so we need to reset the buffer pointer */
 	file->ptr = file->buf;
+	assert(file->bufcnt == 0);
 
 	/*
 	 * if the connection has not been established
@@ -175,7 +177,7 @@ CurlUtil_FillBuffer(CurlUtil_File *file, char *buffer, size_t size)
 		curl_multi_perform(file->multi_handle, &still_running);
 		file->connected = still_running;
 		if (!still_running) {
-			if ((file->bufcnt == 0)) {
+			if (cbdata.avail == 0) {
 				Log_Printf(LOG_ERROR, "Http Connection Failed!");
 				curl_multi_remove_handle(file->multi_handle, file->handle);
 				curl_easy_cleanup(file->handle);
@@ -262,12 +264,14 @@ CurlUtil_Open(const char *url)
 	file->bufcnt = 0;
 	file->bufsz = 0;
 	file->connected = 0;
+	file->offset = 0;
 
 #if ENABLE_READAHEAD
 	file->ra_buf = NULL;
 	file->ra_running = 0;
 	file->ra_reads = 0;
 	file->ra_abort = 0;
+	file->ra_avail = 0;
 	pthread_mutex_init(&file->ra_lock, NULL);
 	pthread_cond_init(&file->ra_signal, NULL);
 	pthread_cond_init(&file->ra_signal, NULL);
@@ -325,7 +329,9 @@ CurlUtil_Seek(CurlUtil_File *file, off_t offset)
 	curl_easy_setopt(file->handle, CURLOPT_RESUME_FROM, (long) offset);
 	curl_multi_add_handle(file->multi_handle, file->handle);
 	file->bufcnt = 0;
+	file->ptr = file->buf;
 	file->connected = 0;
+	file->offset = offset;
 }
 
 #if ENABLE_READAHEAD
@@ -430,8 +436,10 @@ THREAD_EXIT:
 		goto READAHEAD_START;
 	}
 
-	Log_Printf(LOG_DEBUG, "CurlUtil_ReadAhead(%lx): Thread exited | abort=%i",
-		(unsigned long) file, file->ra_abort);
+	Log_Printf(LOG_DEBUG, "CurlUtil_ReadAhead(%lx): "
+		"Exited (abort=%i avail=%zd bufcnt=%zd offset=%zd)",
+		(unsigned long) file, file->ra_abort, file->ra_avail,
+		file->bufcnt, file->offset);
 
 	file->ra_abort = 0;
 	file->ra_running = 0;
@@ -450,8 +458,8 @@ THREAD_EXIT:
 size_t
 CurlUtil_Read(CurlUtil_File *file, void *ptr, size_t size)
 {
-	Log_Printf(LOG_DEBUG, "CurlUtil_Read(%lx, %lx, %zd)",
-		(unsigned long) file, (unsigned long) ptr, size);
+	Log_Printf(LOG_DEBUG, "CurlUtil_Read(%lx, %lx, %zd) - offset=%zd",
+		(unsigned long) file, (unsigned long) ptr, size, file->offset);
 
 	if (size == 0) {
 		return 0;
@@ -459,7 +467,6 @@ CurlUtil_Read(CurlUtil_File *file, void *ptr, size_t size)
 #if ENABLE_READAHEAD
 
 	size_t bytes_read = 0;
-	/* unsigned int waits = 0; */
 
 	/* signal worker that we want data */
 	pthread_mutex_lock(&file->ra_lock);
@@ -468,7 +475,7 @@ CurlUtil_Read(CurlUtil_File *file, void *ptr, size_t size)
 	pthread_mutex_unlock(&file->ra_lock);
 
 	/* if there's no worker thread, get it going */
-	if (!file->ra_running) {
+	if (!file->ra_running && file->ra_avail == 0) {
 		assert(file->ra_abort == 0);
 		pthread_mutex_lock(&file->ra_lock);
 		if (pthread_create(&file->ra_thread, NULL, CurlUtil_ReadAhead, (void*) file)) {
@@ -494,7 +501,9 @@ CurlUtil_Read(CurlUtil_File *file, void *ptr, size_t size)
 			if (chunksz == 0) {
 				if (!file->ra_running) {
 					pthread_mutex_unlock(&file->ra_lock);
-					Log_Printf(LOG_ERROR, "Requested %zd but got %zd", size, bytes_read);
+					Log_Printf(LOG_DEBUG, "CurlUtil: Requested %zd but got %zd",
+						size, bytes_read);
+					file->offset += bytes_read;
 					return bytes_read;
 				}
 				if (file->ra_reads > READAHEAD_TRESHOLD) {
@@ -545,6 +554,7 @@ CurlUtil_Read(CurlUtil_File *file, void *ptr, size_t size)
 			(unsigned long) file, (unsigned long) ptr, size, chunksz, bytes_read);
 #endif
 	}
+	file->offset += bytes_read;
 	file->ra_reads++;
 	return bytes_read;
 #else
