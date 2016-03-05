@@ -39,6 +39,7 @@
 #define READAHEAD_BUFSZ_MAX		((10 * MB) + READAHEAD_BUFSZ_START)
 #define READAHEAD_CHUNK_SIZE	(8 * KB)
 #define READAHEAD_TRESHOLD		(5)
+#define RETRIES_MAX						(3)
 
 #if ENABLE_READAHEAD
 #include <pthread.h>
@@ -50,13 +51,16 @@ struct _CurlUtil_File
 {
 	CURL*  handle;
 	CURLM* multi_handle;
+	CURLcode result;
 	int    connected;
+	int    eof;
 
 	char*  buf;
 	char*  ptr;
 	size_t bufsz;
 	size_t bufcnt;
 	size_t offset;
+	int retries;
 
 #if ENABLE_READAHEAD
 	pthread_t       ra_thread;
@@ -67,6 +71,7 @@ struct _CurlUtil_File
 	size_t          ra_avail;
 	size_t          ra_wants;
 	off_t           ra_seekto;
+	off_t           ra_offset;
 	int             ra_running;
 	unsigned int    ra_reads;
 	int             ra_abort;
@@ -178,14 +183,21 @@ CurlUtil_FillBuffer(CurlUtil_File *file, char *buffer, size_t size)
 	 * then establish it now
 	 */
 	if (!file->connected) {
+#if (ENABLE_READAHEAD == 1)
+		curl_easy_setopt(file->handle, CURLOPT_RESUME_FROM, (long) file->ra_offset);
+#else
+		curl_easy_setopt(file->handle, CURLOPT_RESUME_FROM, (long) file->offset);
+#endif
 		curl_multi_perform(file->multi_handle, &still_running);
 		file->connected = still_running;
 		if (!still_running) {
 			if (cbdata.avail == 0) {
-				Log_Printf(LOG_ERROR, "Http Connection Failed!");
+				Log_Printf(LOG_ERROR, "CurlUtil_FillBuffer() -- Http Connection Failed!");
 				curl_multi_remove_handle(file->multi_handle, file->handle);
 				curl_easy_cleanup(file->handle);
 				file->handle = NULL;
+				/* TODO: check that this is actually what happened */
+				file->result = CURLE_COULDNT_CONNECT;
 				return -1;
 			} else {
 				return cbdata.avail;
@@ -229,8 +241,22 @@ CurlUtil_FillBuffer(CurlUtil_File *file, char *buffer, size_t size)
 		}
 
 		if (rc != -1) {
-			while (curl_multi_perform(file->multi_handle, &still_running) ==
+			while ((rc = curl_multi_perform(file->multi_handle, &still_running)) ==
 				CURLM_CALL_MULTI_PERFORM);
+			if (rc != CURLM_OK) {
+				Log_Printf(LOG_ERROR, "CurlUtil_FillBuffer() -- "
+					"curl_multi_perform() returned %i", rc);
+			}
+			if (!still_running) {
+				CURLMsg *m;
+				int msgcnt;
+				while ((m = curl_multi_info_read(file->multi_handle, &msgcnt)) != NULL) {
+					assert(msgcnt == 0);
+					Log_Printf(LOG_ERROR, "CurlUtil_FillBuffer() -- "
+						"curl: msg=%i result=%i", m->msg, m->data.result);
+					file->result = m->data.result;
+				}
+			}
 		}
 	}
 	while (still_running && (cbdata.rem > 0));
@@ -268,7 +294,10 @@ CurlUtil_Open(const char *url)
 	file->bufcnt = 0;
 	file->bufsz = 0;
 	file->connected = 0;
+	file->eof = 0;
 	file->offset = 0;
+	file->result = CURLE_OK;
+	file->retries = 0;
 
 #if ENABLE_READAHEAD
 	file->ra_buf = NULL;
@@ -276,6 +305,7 @@ CurlUtil_Open(const char *url)
 	file->ra_reads = 0;
 	file->ra_abort = 0;
 	file->ra_avail = 0;
+	file->ra_offset = 0;
 	pthread_mutex_init(&file->ra_lock, NULL);
 	pthread_cond_init(&file->ra_signal, NULL);
 	pthread_cond_init(&file->ra_signal, NULL);
@@ -335,7 +365,9 @@ CurlUtil_Seek(CurlUtil_File *file, off_t offset)
 	file->bufcnt = 0;
 	file->ptr = file->buf;
 	file->connected = 0;
+	file->eof = 0;
 	file->offset = offset;
+	file->ra_offset = offset;
 }
 
 #if ENABLE_READAHEAD
@@ -353,6 +385,7 @@ CurlUtil_ReadAhead(void *f)
 			goto THREAD_EXIT;
 		}
 		file->ra_bufend = file->ra_buf + READAHEAD_BUFSZ_START;
+		file->result = CURLE_OK;
 	}
 
 #define READAHEAD_INIT() \
@@ -401,8 +434,30 @@ READAHEAD_START:
 
 		/* read the chunk */
 		if ((bytes_read = CurlUtil_FillBuffer(file, ptr, chunksz)) == -1) {
+			Log_Printf(LOG_DEBUG, "CurlUtil_ReadAhead: CurlUtil_FillBuffer returned %zd",
+				bytes_read);
+			switch (file->result) {
+			case CURLE_OK:
+				goto THREAD_EXIT;
+
+			case CURLE_COULDNT_CONNECT:
+				Log_Printf(LOG_DEBUG, "CurlUtil_ReadAhead: Sleeping...");
+				sleep(5);
+				/* fall through */
+
+			default:
+				file->connected = 0;
+				if (file->retries++ <= RETRIES_MAX) {
+					Log_Printf(LOG_DEBUG, "CurlUtil_ReadAhead: Retrying... (file=%lx)",
+						(unsigned long) file);
+					goto READAHEAD_START;
+				} else {
+					goto THREAD_EXIT;
+				}
+			}
 			goto THREAD_EXIT;
 		}
+
 		if (bytes_read) {
 			if ((ptr = (ptr + bytes_read)) == file->ra_bufend) {
 				if ((file->ra_bufend < (file->ra_buf + READAHEAD_BUFSZ_MAX)) && file->ra_growbuf) {
@@ -413,6 +468,8 @@ READAHEAD_START:
 					ptr = file->ra_buf;
 				}
 			}
+			file->ra_offset += bytes_read;
+			file->retries = 0;
 			pthread_mutex_lock(&file->ra_lock);
 			file->ra_avail += bytes_read;
 			pthread_cond_signal(&file->ra_signal);
@@ -459,7 +516,7 @@ THREAD_EXIT:
 /**
  * CurlUtil_Read()
  */
-size_t
+ssize_t
 CurlUtil_Read(CurlUtil_File *file, void *ptr, size_t size)
 {
 	Log_Printf(LOG_DEBUG, "CurlUtil_Read(%lx, %lx, %zd) - offset=%zd",
@@ -505,10 +562,21 @@ CurlUtil_Read(CurlUtil_File *file, void *ptr, size_t size)
 			if (chunksz == 0) {
 				if (!file->ra_running) {
 					pthread_mutex_unlock(&file->ra_lock);
-					Log_Printf(LOG_DEBUG, "CurlUtil: Requested %zd but got %zd",
-						size, bytes_read);
-					file->offset += bytes_read;
-					return bytes_read;
+					if (bytes_read == 0) {
+						if (file->result == CURLE_OK && !file->eof) {
+							Log_Printf(LOG_DEBUG, "CurlUtil_Read: Returning 0 (eof)");
+							file->eof = 1;
+							return 0;
+						}
+						Log_Printf(LOG_ERROR, "CurlUtil: Read failed! (result=%i retries=%i)",
+							file->result, file->retries);
+						return -1;
+					} else {
+						Log_Printf(LOG_DEBUG, "CurlUtil: Requested %zd but got %zd",
+							size, bytes_read);
+						file->offset += bytes_read;
+						return bytes_read;
+					}
 				}
 				if (file->ra_reads > READAHEAD_TRESHOLD) {
 					Log_Printf(LOG_DEBUG, "CurlUtil_Read(%lx): Waiting for data!",
@@ -520,7 +588,8 @@ CurlUtil_Read(CurlUtil_File *file, void *ptr, size_t size)
 					pthread_mutex_unlock(&file->ra_lock);
 
 					/* wait for buffer to be full */
-					while (file->ra_avail < (file->ra_bufend - file->ra_buf)) {
+					while (file->ra_running &&
+						file->ra_avail < (file->ra_bufend - file->ra_buf)) {
 						pthread_mutex_lock(&file->ra_lock);
 						pthread_cond_wait(&file->ra_signal, &file->ra_lock);
 						pthread_mutex_unlock(&file->ra_lock);

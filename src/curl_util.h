@@ -1,6 +1,6 @@
 /*
  * curl_util.h : access to the content of a remote file.
- * This file is part of djmount.
+ * This file is part of avmount.
  *
  * (C) Copyright 2016 Fernando Rodriguez
  *
@@ -42,7 +42,7 @@ CurlUtil_Open(const char *url);
 /**
  * Reads data from a network stream
  */
-size_t
+ssize_t
 CurlUtil_Read(CurlUtil_File *file, void *ptr, size_t size);
 
 /**

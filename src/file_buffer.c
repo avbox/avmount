@@ -199,7 +199,7 @@ FileBuffer_Read (FileBuffer* file, char* buffer,
 			file->offset = offset;
 		}
 		do {
-			size_t read_size = size - n;
+			ssize_t read_size = size - n;
 			if ((read_size = CurlUtil_Read(file->handle, buffer, read_size)) < 0) {
 				Log_Printf(LOG_ERROR, "CurlUtil_Read() returned %zd", n);
 				return -EIO;
