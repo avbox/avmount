@@ -39,6 +39,7 @@
 #define READAHEAD_BUFSZ_MAX		((10 * MB) + READAHEAD_BUFSZ_START)
 #define READAHEAD_CHUNK_SIZE	(8 * KB)
 #define READAHEAD_TRESHOLD		(5)
+#define READAHEAD_FSEEK_MAX   (64 * KB)
 #define RETRIES_MAX						(3)
 
 #if ENABLE_READAHEAD
@@ -107,7 +108,9 @@ CurlUtil_WriteCallback(char *buffer, size_t size, size_t nitems, void *userp)
 	/* get what we need */
 	if (cbdata->rem > 0) {
 		bytes_to_copy = MIN(sz, cbdata->rem);
-		memcpy(cbdata->buf + cbdata->avail, buffer, bytes_to_copy);
+		if (cbdata->buf != NULL) {
+			memcpy(cbdata->buf + cbdata->avail, buffer, bytes_to_copy);
+		}
 		cbdata->avail += bytes_to_copy;
 		cbdata->rem -= bytes_to_copy;
 		sz -= bytes_to_copy;
@@ -163,7 +166,9 @@ CurlUtil_FillBuffer(CurlUtil_File *file, char *buffer, size_t size)
 	/* if we got data in the buffer use it first */
 	if (file->bufcnt && cbdata.rem) {
 		size_t bytes_to_copy = MIN(file->bufcnt, cbdata.rem);
-		memcpy(cbdata.buf, file->ptr, bytes_to_copy);
+		if (cbdata.buf != NULL) {
+			memcpy(cbdata.buf, file->ptr, bytes_to_copy);
+		}
 		cbdata.avail += bytes_to_copy;
 		cbdata.rem -= bytes_to_copy;
 		file->bufcnt -= bytes_to_copy;
@@ -252,7 +257,7 @@ CurlUtil_FillBuffer(CurlUtil_File *file, char *buffer, size_t size)
 				int msgcnt;
 				while ((m = curl_multi_info_read(file->multi_handle, &msgcnt)) != NULL) {
 					assert(msgcnt == 0);
-					Log_Printf(LOG_ERROR, "CurlUtil_FillBuffer() -- "
+					Log_Printf(LOG_DEBUG, "CurlUtil_FillBuffer() -- "
 						"curl: msg=%i result=%i", m->msg, m->data.result);
 					file->result = m->data.result;
 				}
@@ -349,7 +354,9 @@ CurlUtil_Seek(CurlUtil_File *file, off_t offset)
 			pthread_mutex_unlock(&file->ra_lock);
 			while (file->ra_seekto != -1) {
 				pthread_mutex_lock(&file->ra_lock);
-				pthread_cond_wait(&file->ra_signal, &file->ra_lock);
+				if (file->ra_seekto != -1) {
+					pthread_cond_wait(&file->ra_signal, &file->ra_lock);
+				}
 				pthread_mutex_unlock(&file->ra_lock);
 			}
 			return;
@@ -374,10 +381,12 @@ CurlUtil_Seek(CurlUtil_File *file, off_t offset)
 static void*
 CurlUtil_ReadAhead(void *f)
 {
-	char *ptr;
+	char *ptr = NULL;
 	CurlUtil_File *file = (CurlUtil_File*) f;
 
 	if (file->ra_buf == NULL) {
+		Log_Printf(LOG_DEBUG, "ReadAhead(file=%lx): Mapping %zd KiB buffer...",
+			(unsigned long) file, (size_t) READAHEAD_BUFSZ_MAX / 1024);
 		file->ra_buf = mmap(NULL, READAHEAD_BUFSZ_MAX,
 			PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 		if (file->ra_buf == NULL) {
@@ -490,6 +499,46 @@ THREAD_EXIT:
 	if (file->ra_seekto != -1) {
 		Log_Printf(LOG_DEBUG, "CurlUtil_ReadAhead: Seeking to %zd",
 			file->ra_seekto);
+		if (file->ra_seekto > file->offset) {
+			if (file->ra_seekto <= file->ra_offset) {
+				/* we already have the data */
+				Log_Printf(LOG_DEBUG, "CurlUtil_ReadAhead(file=%lx): In-buffer seek",
+					(unsigned long) file);
+				size_t bytes_to_skip = file->ra_seekto - file->offset;
+				file->ra_ptr += bytes_to_skip;
+				if (file->ra_ptr >= file->ra_bufend) {
+					file->ra_ptr = file->ra_buf + (file->ra_ptr - file->ra_bufend);
+				}
+				file->ra_avail -= bytes_to_skip;
+				file->offset = file->ra_seekto;
+				file->ra_seekto = -1;
+				file->ra_abort = 0;
+				pthread_mutex_unlock(&file->ra_lock);
+				goto READAHEAD_START;
+			} else if ((file->ra_seekto - file->ra_offset) < READAHEAD_FSEEK_MAX) {
+				/* short seek */
+				Log_Printf(LOG_DEBUG, "CurlUtil_ReadAhead(file=%lx): Short seek",
+					(unsigned long) file);
+				size_t bytes_to_skip = file->ra_seekto - file->ra_offset;
+				size_t bytes_read = 0;
+				file->ra_ptr = ptr = file->ra_buf;
+				file->ra_avail = 0;
+				file->offset = file->ra_seekto;
+				file->ra_seekto = -1;
+				file->ra_abort = 0;
+
+				assert(bytes_to_skip > 0);
+
+				if ((bytes_read = CurlUtil_FillBuffer(file, NULL, bytes_to_skip)) == -1) {
+					pthread_mutex_unlock(&file->ra_lock);
+					goto THREAD_EXIT;
+				}
+				file->ra_offset += bytes_read;
+				assert(bytes_read == bytes_to_skip);
+				pthread_mutex_unlock(&file->ra_lock);
+				goto READAHEAD_START;
+			}
+		}
 		file->ra_running = 0;
 		CurlUtil_Seek(file, file->ra_seekto);
 		READAHEAD_INIT();
