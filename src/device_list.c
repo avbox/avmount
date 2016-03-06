@@ -529,16 +529,28 @@ EventHandlerCallback (Upnp_EventType event_type,
 				    e->ErrCode);	
 		}
 		// TBD else ??
-      
-		if (e->DeviceId && e->DeviceId[0]) { 
-			Log_Printf (LOG_DEBUG, 
-				    "Discovery : device type '%s' "
-				    "OS '%s' at URL '%s'", NN(e->DeviceType), 
-				    NN(e->Os), NN(e->Location));
-			AddDevice (e->DeviceId, e->Location, e->Expires);
-			Log_Printf (LOG_DEBUG, "Discovery: "
-				    "DeviceList after AddDevice = \n%s",
-				    DeviceList_GetStatusString (tmp_ctx));
+
+		/*
+		 * If this is an adverstisement for a device with a
+		 * ContentDirectory service then attempt to add the
+		 * device.
+		 */
+		if (e->ServiceType != NULL) {
+			const char *p1 = "urn:schemas-upnp-org:service:ContentDirectory";
+			const char *p2 = e->ServiceType;
+			while (*p1 != '\0' && *p1++ == *p2++);
+			if (*p1 == '\0') {
+				if (e->DeviceId && e->DeviceId[0]) {
+					Log_Printf (LOG_DEBUG,
+						"Discovery : device type '%s' "
+						"OS '%s' at URL '%s'", NN(e->DeviceType),
+						NN(e->Os), NN(e->Location));
+					AddDevice (e->DeviceId, e->Location, e->Expires);
+					Log_Printf (LOG_DEBUG, "Discovery: "
+						"DeviceList after AddDevice = \n%s",
+						DeviceList_GetStatusString (tmp_ctx));
+				}
+			}
 		}
 		
 		break;
