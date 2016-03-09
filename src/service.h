@@ -70,7 +70,8 @@ Service*
 Service_Create (void* context,
 		UpnpClient_Handle ctrlpt_handle, 
 		IXML_Element* serviceDesc, 
-		const char* base_url);
+		const char* base_url,
+		const char* iface);
 
 
 /******************************************************************************
@@ -78,7 +79,7 @@ Service_Create (void* context,
  *		Should normally be done just after Service creation.
  *****************************************************************************/
 int
-Service_SubscribeEventURL (Service* serv);
+Service_SubscribeEventURL (const char *iface, Service* serv);
 
 
 /*****************************************************************************

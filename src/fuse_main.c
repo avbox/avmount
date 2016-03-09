@@ -50,6 +50,7 @@
 #include "content_dir.h"
 #include "charset.h"
 #include "minmax.h"
+#include "clientmgr.h"
 
 #if USE_CURL
 #include "curl_util.h"
@@ -825,7 +826,10 @@ main (int argc, char *argv[])
 	/*
 	 * Initialise UPnP Control point and starts FUSE file system
 	 */
-	
+
+#if 1
+	ClientManager_Start();
+#else
 	rc = DeviceList_Start (CONTENT_DIR_SERVICE_TYPE, NULL);
 	if (rc != UPNP_E_SUCCESS) {
 		Log_Printf (LOG_ERROR, 
@@ -833,7 +837,7 @@ main (int argc, char *argv[])
 			    rc, UpnpGetErrorMessage (rc));
 		exit (rc); // ---------->
 	}
-	
+#endif
 
 	fuse_argv[fuse_argc] = NULL; // End FUSE arguments list
 	rc = fuse_main (fuse_argc, fuse_argv, &fs_oper);
@@ -842,7 +846,11 @@ main (int argc, char *argv[])
 	}
 	
 	Log_Printf (LOG_DEBUG, "Shutting down ...");
+#if 1
+	ClientManager_Stop();
+#else
 	DeviceList_Stop();
+#endif
 	
 	(void) Charset_Finish();
 	Log_Finish();

@@ -44,6 +44,7 @@ OBJECT_DEFINE_STRUCT(Service,
 		     char* eventURL;
 		     char* controlURL;
 		     char* sid;
+		     const char* iface;
 		     
 		     // TBD XXX to replace by hashtable XXX
 		     LinkedList	variables;

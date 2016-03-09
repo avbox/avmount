@@ -121,7 +121,8 @@ ContentDir*
 ContentDir_Create (void* context,
 		   UpnpClient_Handle ctrlpt_handle, 
 		   IXML_Element* serviceDesc, 
-		   const char* base_url);
+		   const char* base_url,
+			 const char* iface);
 
 
 /*****************************************************************************

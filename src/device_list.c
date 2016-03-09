@@ -29,6 +29,7 @@
 #endif
 
 #include "device_list.h"
+#include "content_dir.h"
 #include "device.h"
 #include "upnp_util.h"
 #include "log.h"
@@ -36,11 +37,15 @@
 #include "talloc_util.h"
 
 #include <stdbool.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <fcntl.h>
 #include <upnp/upnp.h>
 #include <upnp/ithread.h>
 #include <upnp/upnptools.h>
 #include <upnp/LinkedList.h>
-
 
 
 // How often to check advertisement and subscription timeouts for devices
@@ -53,7 +58,7 @@ static UpnpClient_Handle g_ctrlpt_handle = -1;
 
 static ithread_t g_timer_thread;
 
-static char* g_ssdp_target = NULL;
+static char* g_ssdp_target = CONTENT_DIR_SERVICE_TYPE;
 
 
 /*
@@ -68,7 +73,6 @@ static ithread_mutex_t DeviceListMutex;
 /*
  * The global device list
  */
-
 struct _DeviceNode {
   char*    deviceId; // as reported by the discovery callback
   Device*  d;
@@ -144,18 +148,19 @@ GetDeviceNodeFromName (const char* name, bool log_error)
 static ListNode*
 GetDeviceListNodeFromId (const char* deviceId)
 {
-  if (deviceId) {
-    ListNode* node;
-    for (node = ListHead (&GlobalDeviceList);
-	 node != 0;
-	 node = ListNext (&GlobalDeviceList, node)) {
-      DeviceNode* const devnode = node->item;
-      if (devnode && devnode->deviceId && 
-	  strcmp (devnode->deviceId, deviceId) == 0) 
-	return node; // ---------->
-    }
-  }
-  return 0;
+	if (deviceId) {
+		ListNode* node;
+		for (node = ListHead (&GlobalDeviceList);
+			node != 0;
+			node = ListNext (&GlobalDeviceList, node)) {
+			DeviceNode* const devnode = node->item;
+			if (devnode && devnode->deviceId && 
+				strcmp (devnode->deviceId, deviceId) == 0) {
+				return node; // ---------->
+			}
+		}
+	}
+	return 0;
 }
 
 static Service*
@@ -232,8 +237,6 @@ DeviceList_RemoveDevice (const char* deviceId)
 		NotifyUpdate (E_DEVICE_REMOVED, devnode);
 		talloc_free (devnode);
 	} else {
-		Log_Printf (LOG_WARNING, "RemoveDevice can't find Id=%s", 
-			    NN(deviceId));
 		rc = UPNP_E_INVALID_DEVICE;
 	}
 	
@@ -345,9 +348,9 @@ HandleEvent (Upnp_SID sid,
 
 
 static void
-AddDevice (const char* deviceId,
+AddDevice (const char *iface, const char* deviceId,
 	   const char* descLocation,
-	   int expires)
+	   int expires, UpnpClient_Handle client_handle)
 {
 	ithread_mutex_lock (&DeviceListMutex);
 
@@ -405,16 +408,21 @@ AddDevice (const char* deviceId,
 				    "Trying to parse anyway ...", 
 				    descLocation, content_type);
 		}
-		
-		void* context = NULL; // TBD should be parent talloc TBD XXX
 
+		void* context = NULL; // TBD should be parent talloc TBD XXX
+		
 		devnode = talloc (context, DeviceNode);
+		if (devnode == NULL) {
+			Log_Printf(LOG_ERROR, "Could not allocate device node");
+			return;
+		}
 		// Initialize fields to empty values
 		*devnode = (struct _DeviceNode) { }; 
 
-		devnode->d = Device_Create (devnode, g_ctrlpt_handle, 
+		devnode->d = Device_Create (devnode, client_handle,
 					    descLocation, deviceId,
-					    descDocText);
+					    descDocText,
+							iface);
 		free (descDocText);
 		descDocText = NULL;
 
@@ -455,8 +463,14 @@ AddDevice (const char* deviceId,
 				// the Service destructors will not unsubscribe
 				talloc_free (devnode);
 			} else {
-				devnode->deviceId = talloc_strdup (devnode, 
-								   deviceId);
+				devnode->deviceId = talloc_strdup (devnode,
+																					 deviceId);
+				if (devnode->deviceId == NULL) {
+					Log_Printf(LOG_ERROR, "Could not allocate deviceId");
+					ithread_mutex_unlock (&DeviceListMutex);
+					talloc_free (devnode);
+					return;
+				}
 				devnode->expires = expires;
 				
 				// Generate a unique, friendly, name 
@@ -476,7 +490,7 @@ AddDevice (const char* deviceId,
 				// Insert the new device node in the list
 				ListAddTail (&GlobalDeviceList, devnode);
 
-				Device_SusbcribeAllEvents (devnode->d);
+				Device_SusbcribeAllEvents (iface, devnode->d);
 				
 				// Notify New Device Added, while the global 
 				// list is still locked
@@ -503,13 +517,18 @@ AddDevice (const char* deviceId,
  *   cookie -- Optional data specified during callback registration
  *
  *****************************************************************************/
-static int
-EventHandlerCallback (Upnp_EventType event_type,
+int
+DeviceList_EventHandlerCallback (const char *iface_name, Upnp_EventType event_type,
 		      void* event, void* cookie)
 {
+
 	// Create a working context for temporary strings
 	void* const tmp_ctx = talloc_new (NULL);
 
+	UpnpClient_Handle handle = *((UpnpClient_Handle*) cookie);
+
+	Log_Printf(LOG_DEBUG, "Received event from %s (handle=%lu)",
+		iface_name, (unsigned long) handle);
 	Log_Print (LOG_DEBUG, UpnpUtil_GetEventString (tmp_ctx, event_type, 
 						       event));
 	
@@ -545,7 +564,7 @@ EventHandlerCallback (Upnp_EventType event_type,
 						"Discovery : device type '%s' "
 						"OS '%s' at URL '%s'", NN(e->DeviceType),
 						NN(e->Os), NN(e->Location));
-					AddDevice (e->DeviceId, e->Location, e->Expires);
+					AddDevice (iface_name, e->DeviceId, e->Location, e->Expires, handle);
 					Log_Printf (LOG_DEBUG, "Discovery: "
 						"DeviceList after AddDevice = \n%s",
 						DeviceList_GetStatusString (tmp_ctx));
@@ -668,7 +687,7 @@ EventHandlerCallback (Upnp_EventType event_type,
 		Service* const serv = GetService (e->PublisherUrl, 
 						  FROM_EVENT_URL);
 		if (serv) 
-			Service_SubscribeEventURL (serv);
+			Service_SubscribeEventURL (iface_name, serv);
 		
 		ithread_mutex_unlock (&DeviceListMutex);
 		
@@ -688,6 +707,14 @@ EventHandlerCallback (Upnp_EventType event_type,
 	talloc_free (tmp_ctx);
 
 	return 0;
+}
+
+static int
+EventHandlerCallback (Upnp_EventType event_type,
+		      void* event, void* cookie)
+{
+	return DeviceList_EventHandlerCallback(
+		NULL, event_type, event, cookie);
 }
 
 
@@ -965,6 +992,23 @@ CheckSubscriptionsLoop (void* arg)
 	return NULL;
 }
 
+int
+DeviceList_Init()
+{
+	ithread_mutex_init (&DeviceListMutex, NULL);
+
+	ListInit (&GlobalDeviceList, 0, 0);
+
+	// Makes the XML parser more tolerant to malformed text
+	ixmlRelaxParser ('?');
+
+	//DeviceList_RefreshAll (true);
+
+	// start a timer thread
+	ithread_create (&g_timer_thread, NULL, CheckSubscriptionsLoop, NULL);
+
+	return 0;
+}
 
 /*****************************************************************************
  * DeviceList_Start
@@ -987,14 +1031,9 @@ DeviceList_Start (const char* ssdp_target,
 	char* ip_address = NULL;
 	
 	gStateUpdateFun = eventCallback;
-	
-	ithread_mutex_init (&DeviceListMutex, NULL);
-	
-	ListInit (&GlobalDeviceList, 0, 0);
-	
-	// Makes the XML parser more tolerant to malformed text
-	ixmlRelaxParser ('?');
-	
+
+	DeviceList_Init();
+
 	Log_Printf (LOG_DEBUG, "Intializing UPnP with ipaddress=%s port=%d",
 		    NN(ip_address), port);
 	rc = UpnpInit (ip_address, port);
@@ -1030,11 +1069,8 @@ DeviceList_Start (const char* ssdp_target,
 	Log_Printf (LOG_DEBUG, "Control Point Registered" );
 	
 	g_ssdp_target = talloc_strdup (NULL, ssdp_target);
-	DeviceList_RefreshAll (true);
 	
-	// start a timer thread
-	ithread_create (&g_timer_thread, NULL, CheckSubscriptionsLoop, NULL);
-	
+
 	return rc;
 }
 
@@ -1046,7 +1082,7 @@ int
 DeviceList_Stop (void)
 {
 	int rc;
-	
+
 	/*
 	 * Reverse all "Start" operations
 	 */

@@ -47,12 +47,6 @@
 // Number of cached entries. Set to zero to deactivate caching.
 #define CACHE_SIZE	1024
 
-// Maximum permissible content-length for SOAP messages, in bytes
-// (taking into account that "Browse" answers can be very large 
-// if contain lot of objects).
-#define MAX_CONTENT_LENGTH	(1024 * 1024) 
-
-
 
 /******************************************************************************
  * Local types
@@ -571,12 +565,6 @@ init_class (ContentDir_Class* const isa)
 { 
 	CLASS_BASE_CAST(isa)->finalize = finalize;
 	CLASS_SUPER_CAST(isa)->get_status_string = get_status_string;
-
-	// Class-specific initialization :
-	// Increase maximum permissible content-length for SOAP 
-	// messages, because "Browse" answers can be very large 
-	// if contain lot of objects.
-	UpnpSetMaxContentLength (MAX_CONTENT_LENGTH);
 }
 
 OBJECT_INIT_CLASS(ContentDir, Service, init_class);
@@ -589,10 +577,11 @@ ContentDir*
 ContentDir_Create (void* talloc_context, 
 		   UpnpClient_Handle ctrlpt_handle, 
 		   IXML_Element* serviceDesc, 
-		   const char* base_url)
+		   const char* base_url,
+			 const char* iface)
 {
 	OBJECT_SUPER_CONSTRUCT (ContentDir, Service_Create, talloc_context,
-				ctrlpt_handle, serviceDesc, base_url);
+				ctrlpt_handle, serviceDesc, base_url, iface);
 	if (self == NULL)
 		goto error; // ---------->
 	

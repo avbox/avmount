@@ -258,6 +258,11 @@ void
 _DeviceList_UnlockService (Service* serv);
 
 
+int
+DeviceList_Init();
+
+void
+DeviceList_SetMasterFd();
 
 #ifdef __cplusplus
 }; // extern "C" 

@@ -38,6 +38,7 @@
 #include <upnp/upnptools.h>
 
 #include "service_p.h"
+#include "clientmgr.h"
 
 
 /** Default timeout to request during subscriptions */
@@ -52,7 +53,7 @@
  * Service_SubscribeEventURL
  *****************************************************************************/
 int
-Service_SubscribeEventURL (Service* serv)
+Service_SubscribeEventURL (const char *iface, Service* serv)
 {
 	int rc;
 	if (serv == NULL) {
@@ -64,8 +65,13 @@ Service_SubscribeEventURL (Service* serv)
 			    NN(serv->eventURL));
 		int timeout = SUBSCRIBE_DEFAULT_TIMEOUT;    
 		Upnp_SID sid;
-		rc = UpnpSubscribe (serv->ctrlpt_handle, serv->eventURL, 
+		if (iface == NULL) {
+			rc = UpnpSubscribe (serv->ctrlpt_handle, serv->eventURL, 
 				    &timeout, sid);
+		} else {
+			rc = ClientManager_UpnpSubscribe(iface,
+				serv->ctrlpt_handle, serv->eventURL, &timeout, sid);
+		}
 		talloc_free (serv->sid);
 		if ( rc == UPNP_E_SUCCESS ) {
 			serv->sid = talloc_strdup (serv, sid);
@@ -100,8 +106,13 @@ Service_UnsubscribeEventURL (Service* serv)
 		/*
 		 * If we have a valid control SID, then unsubscribe 
 		 */
-		rc = UpnpUnSubscribe (serv->ctrlpt_handle, 
+		if (serv->iface == NULL) {
+			rc = UpnpUnSubscribe (serv->ctrlpt_handle, 
 				      serv->sid);
+		} else {
+			rc = ClientManager_UpnpUnSubscribe(serv->iface,
+				serv->ctrlpt_handle, serv->sid);
+		}
 		if ( UPNP_E_SUCCESS == rc ) {
 			Log_Printf(LOG_DEBUG, 
 				   "Unsubscribed from %s EventURL with SID=%s",
@@ -416,6 +427,7 @@ Service_SendAction (Service* serv,
 		    int nb_params, const StringPair* params)
 {
   int rc = UPNP_E_SUCCESS;
+	Log_Printf (LOG_DEBUG, "Service_SendAction: nb_params: %i", nb_params);
   Log_Printf (LOG_DEBUG, "Service_SendAction '%s'", NN(actionName));
   
   if (serv == NULL) {
@@ -433,9 +445,14 @@ Service_SendAction (Service* serv,
     } else {
       // Send action request
       *response = NULL;
-      rc = UpnpSendAction (serv->ctrlpt_handle, serv->controlURL,
-			   serv->serviceType, NULL, actionNode,
-			   response);
+			if (serv->iface == NULL) {
+	      rc = UpnpSendAction (serv->ctrlpt_handle, serv->controlURL,
+				   serv->serviceType, NULL, actionNode,
+				   response);
+			} else {
+				rc = ClientManager_UpnpSendAction(serv->iface, serv->ctrlpt_handle,
+					serv->controlURL, serv->serviceType, NULL, actionNode, response);
+			}
       ActionError (serv, actionName, rc, response);
       ixmlDocument_free (actionNode);
       actionNode = NULL;
@@ -582,7 +599,8 @@ Service*
 Service_Create (void* talloc_context, 
 		UpnpClient_Handle ctrlpt_handle, 
 		IXML_Element* serviceDesc, 
-		const char* base_url)
+		const char* base_url,
+		const char* iface)
 {
 	OBJECT_SUPER_CONSTRUCT (Service, Object_Create, talloc_context, NULL);
 	if (self == NULL)
@@ -609,6 +627,7 @@ Service_Create (void* talloc_context,
 	self->eventURL = UpnpUtil_ResolveURL (self, base_url, releventURL);
 	
 	self->sid = NULL;
+	self->iface = talloc_strdup(self, iface);
 	
 	// Initialise list of variables
 	ListInit (&self->variables, 0, 0);

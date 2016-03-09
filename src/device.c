@@ -53,6 +53,7 @@ struct _Device {
 	const char*	descDocURL;
 	const char*	descDocText;
 	const char*	baseURL;	// <URLBase> if exists, else descDocURL
+	const char* iface;
 
 	/*
 	 * <device> elements
@@ -93,10 +94,10 @@ ServiceFactory (Device* dev,
 				    CONTENT_DIR_SERVICE_TYPE) == 0 ) {
 		serv = ContentDir_ToService 
 			(ContentDir_Create (dev, ctrlpt_handle, 
-					    serviceDesc, base_url));
+					    serviceDesc, base_url, dev->iface));
 	} else {
 		serv = Service_Create (dev, ctrlpt_handle,
-				       serviceDesc, base_url);
+				       serviceDesc, base_url, dev->iface);
 	}
 	if (serv == NULL)
 		Log_Printf (LOG_ERROR, "Error creating service type %s",
@@ -192,7 +193,8 @@ Device_Create (void* parent_context,
 	       UpnpClient_Handle ctrlpt_handle, 
 	       const char* const descDocURL, 
 	       const char* const deviceId,
-	       const char* const descDocText)
+	       const char* const descDocText,
+				 const char* const iface)
 {
 	if (descDocURL == NULL || *descDocURL == NUL) {
 		Log_Printf (LOG_ERROR, 
@@ -248,6 +250,7 @@ Device_Create (void* parent_context,
 		.descDoc       = descDoc,
 		.descDocText   = talloc_strdup (dev, descDocText),
 		.descDocNode   = descDocNode,
+		.iface         = talloc_strdup (dev, iface),
 		// Other fields to empty values
 	};
 
@@ -336,7 +339,7 @@ Device_GetDescDocTextCopy (const Device* dev, void* result_context)
  *****************************************************************************/
 
 int
-Device_SusbcribeAllEvents (const Device* dev)
+Device_SusbcribeAllEvents (const char* iface, const Device* dev)
 {  
 	if (dev == NULL)
 		return UPNP_E_INVALID_DEVICE; // ---------->
@@ -351,7 +354,7 @@ Device_SusbcribeAllEvents (const Device* dev)
 	for (node = ListHead (services);
 	     node != NULL;
 	     node = ListNext (services, node)) {
-		int rc2 = Service_SubscribeEventURL (node->item); 
+		int rc2 = Service_SubscribeEventURL (iface, node->item); 
 		if (rc2 != UPNP_E_SUCCESS)
 			rc = rc2;
 	}

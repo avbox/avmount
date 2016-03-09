@@ -68,14 +68,15 @@ Device_Create (void* context,
 	       UpnpClient_Handle ctrlpt_handle, 
 	       const char* const descDocURL, 
 	       const char* const deviceId,
-	       const char* const descDocText);
+	       const char* const descDocText,
+				 const char* const iface);
 
 
 /******************************************************************************
  * @brief Subscribe all services to their event URL
  *****************************************************************************/
 int
-Device_SusbcribeAllEvents (const Device* dev);
+Device_SusbcribeAllEvents (const char *iface, const Device* dev);
 
 
 /** 
