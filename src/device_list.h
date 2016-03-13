@@ -125,63 +125,6 @@ DeviceList_RefreshAll (bool remove_all);
 
 
 /*****************************************************************************
- * @brief Send an Action request to the specified service of a device
- *	  (asynchronous call).
- *
- * @param deviceName    the device name
- * @param serviceType	the service type
- * @param actionName    the name of the action
- * @param nb_params	Number of pairs (names + values)
- * @param params	List of pairs : names + values 
- *****************************************************************************/
-int 
-DeviceList_SendActionAsync (const char* deviceName, const char* serviceType,
-			    const char* actionName, 
-			    int nb_params, const StringPair* params);
-
-
-/*****************************************************************************
- * @brief Send an Action request to the specified service of a device
- *	  (synchronous call).
- *
- * @param deviceName    the device name
- * @param serviceType	the service type
- * @param actionName    the name of the action
- * @param nb_params	Number of pairs (names + values)
- * @param params	List of pairs : names + values 
- * @return              the DOM document for the response. Allocated
- *		        by the SDK ; the caller needs to free it.
- *****************************************************************************/
-IXML_Document* 
-DeviceList_SendAction (const char* deviceName, const char* serviceType,
-		       const char* actionName, 
-		       int nb_params, const StringPair* params);
-  
-
-
-#ifdef __cplusplus
-}; // extern "C"
-
-template<class T>
-int	DeviceList_SendAction1 (const char* deviceName, 
-				const char* serviceType,
-				const std::string& actionName,
-				const std::string& paramName,
-				T paramValue)
-{
-  std::stringstream o;
-  o << paramValue;
-  return DeviceList_SendActionAsyncVa (deviceName, serviceType, 
-				       actionName.c_str(),
-				       paramName.c_str(), o.str().c_str(), 
-				       (char*) NULL, (char*) NULL);
-}
-
-extern "C" {
-#endif // __cplusplus
-
-
-/*****************************************************************************
  * @brief Get the list of all device names
  * 	  The returned array should be freed using "talloc_free".
  *
@@ -217,29 +160,17 @@ DeviceList_GetDeviceStatusString (void* talloc_context,
 
 
 /*****************************************************************************
- * @brief Call this function to initialize the UPnP library and start the 
- *	  Control Point.  
- *
- * 	This function creates a timer thread and provides a callback
- *	handler to process any UPnP events that are received.
- * 
- * @param target    the search target as defined in the UPnP Device 
- *                  Architecture v1.0 specification e.g. "ssdp:all" for all.
- * @return UPNP_E_SUCCESS if everything went well, else a UPNP error code
+ * @brief Initialize device list.
  *****************************************************************************/
-int 
-DeviceList_Start (const char* ssdp_target,
-		  DeviceList_EventCallback eventCallback);
+int
+DeviceList_Init();
 
 
 /*****************************************************************************
- * @brief      	Destroy the device list and stops the UPnP Control Point.
- *
- * @return 	UPNP_E_SUCCESS if everything went well, else a UPNP error code
+ * @brief Destroy device list.
  *****************************************************************************/
-int 
-DeviceList_Stop (void);
-
+void
+DeviceList_Destroy();
 
 
 /*****************************************************************************
@@ -257,12 +188,6 @@ _DeviceList_LockService (const char* deviceName, const char* serviceType);
 void
 _DeviceList_UnlockService (Service* serv);
 
-
-int
-DeviceList_Init();
-
-void
-DeviceList_SetMasterFd();
 
 #ifdef __cplusplus
 }; // extern "C" 

@@ -89,31 +89,6 @@ typedef struct _DeviceNode DeviceNode;
 static LinkedList GlobalDeviceList;
 
 
-
-/*****************************************************************************
- * NotifyUpdate
- *
- * Description: callback for update events
- *
- * Parameters:
- *
- *****************************************************************************/
-
-// Function pointer for update event callbacks
-static DeviceList_EventCallback gStateUpdateFun = 0;
-
-static void
-NotifyUpdate (DeviceList_EventType type,
-	      // TBD	      const char* varName,
-	      // TBD	      const char* varValue,
-	      const DeviceNode* devnode)
-{
-  if (gStateUpdateFun && devnode && devnode->d)
-    gStateUpdateFun (type, talloc_get_name (devnode->d));
-  // TBD: Add mutex here?
-}
-
-
 /*****************************************************************************
  * GetDeviceNodeFromName
  *
@@ -233,8 +208,6 @@ DeviceList_RemoveDevice (const char* deviceId)
 		DeviceNode* devnode = node->item;
 		node->item = 0;
 		ListDelNode (&GlobalDeviceList, node, /*freeItem=>*/ 0);
-		// Do the notification while the global list is still locked
-		NotifyUpdate (E_DEVICE_REMOVED, devnode);
 		talloc_free (devnode);
 	} else {
 		rc = UPNP_E_INVALID_DEVICE;
@@ -267,8 +240,6 @@ DeviceList_RemoveAll (void)
        node = ListNext (&GlobalDeviceList, node)) {
     DeviceNode* devnode = node->item;
     node->item = 0;
-    // Do the notifications while the global list is still locked
-    NotifyUpdate (E_DEVICE_REMOVED, devnode);
     talloc_free (devnode);
   }
   ListDestroy (&GlobalDeviceList, /*freeItem=>*/ 0);
@@ -491,10 +462,6 @@ AddDevice (const char *iface, const char* deviceId,
 				ListAddTail (&GlobalDeviceList, devnode);
 
 				Device_SusbcribeAllEvents (iface, devnode->d);
-				
-				// Notify New Device Added, while the global 
-				// list is still locked
-				NotifyUpdate (E_DEVICE_ADDED, devnode);
 			}
 		}
 	}
@@ -709,15 +676,6 @@ DeviceList_EventHandlerCallback (const char *iface_name, Upnp_EventType event_ty
 	return 0;
 }
 
-static int
-EventHandlerCallback (Upnp_EventType event_type,
-		      void* event, void* cookie)
-{
-	return DeviceList_EventHandlerCallback(
-		NULL, event_type, event, cookie);
-}
-
-
 /*****************************************************************************
  * _DeviceList_LockDevice
  *****************************************************************************/
@@ -786,40 +744,6 @@ _DeviceList_UnlockService (Service* serv)
 	if (serv)
 		ithread_mutex_unlock (&DeviceListMutex);
 }
-
-
-/*****************************************************************************
- * DeviceList_SendActionAsync
- *****************************************************************************/
-int
-DeviceList_SendActionAsync (const char* deviceName, const char* serviceType,
-			    const char* actionName, 
-			    int nb_params, const StringPair* params)
-{
-  int rc = UPNP_E_INTERNAL_ERROR;
-  DEVICE_LIST_CALL_SERVICE (rc, deviceName, serviceType,
-			    Service, SendActionAsync,
-			    EventHandlerCallback, actionName, 
-			    nb_params, params);
-  return rc;
-}
-
-
-/*****************************************************************************
- * DeviceList_SendAction
- *****************************************************************************/
-IXML_Document*
-DeviceList_SendAction (const char* deviceName, const char* serviceType,
-		       const char* actionName, 
-		       int nb_params, const StringPair* params)
-{
-  IXML_Document* res = NULL;
-  int rc = UPNP_E_INTERNAL_ERROR;
-  DEVICE_LIST_CALL_SERVICE (rc, deviceName, serviceType, Service, SendAction,
-			    &res, actionName, nb_params, params);
-  return (rc == UPNP_E_SUCCESS ? res : NULL);
-}
-
 
 /*****************************************************************************
  * GetDevicesNames
@@ -955,8 +879,6 @@ VerifyTimeouts (int incr)
         Log_Printf (LOG_DEBUG, "Remove expired device Id=%s", devnode->deviceId);
         node->item = 0;
         ListDelNode (&GlobalDeviceList, node, /*freeItem=>*/ 0);
-        // Do the notification while the global list is locked
-        NotifyUpdate (E_DEVICE_REMOVED, devnode);
         talloc_free (devnode);
       } else {
 				/* TODO: Should we check that descDocText hasn't changed
@@ -992,6 +914,9 @@ CheckSubscriptionsLoop (void* arg)
 	return NULL;
 }
 
+/*****************************************************************************
+ * DeviceList_Init
+ *****************************************************************************/
 int
 DeviceList_Init()
 {
@@ -1010,98 +935,10 @@ DeviceList_Init()
 	return 0;
 }
 
-/*****************************************************************************
- * DeviceList_Start
- *****************************************************************************/
-int
-DeviceList_Start (const char* ssdp_target, 
-		  DeviceList_EventCallback eventCallback)
+void
+DeviceList_Destroy()
 {
-	// Cf. AddDevice : only some SSDP target are implemented 
-	if (ssdp_target == NULL || 
-	    (strcmp (ssdp_target, "ssdp:all") != 0 &&
-	     strstr (ssdp_target, ":service:") == NULL)) {
-		Log_Printf (LOG_ERROR, "DeviceList : invalid or not "
-			    "implemented SSDP target '%s", NN(ssdp_target));
-		return UPNP_E_INVALID_PARAM; // ---------->
-	}
-
-	int rc;
-	unsigned short port = 0;
-	char* ip_address = NULL;
-	
-	gStateUpdateFun = eventCallback;
-
-	DeviceList_Init();
-
-	Log_Printf (LOG_DEBUG, "Intializing UPnP with ipaddress=%s port=%d",
-		    NN(ip_address), port);
-	rc = UpnpInit (ip_address, port);
-	if( UPNP_E_SUCCESS != rc ) {
-		Log_Printf (LOG_ERROR, "UpnpInit() Error: %d", rc);
-		UpnpFinish();
-		if (rc == UPNP_E_SOCKET_ERROR) {
-			Log_Printf (LOG_ERROR, "Check network configuration, "
-				    "in particular that a multicast route "
-				    "is set for the default network "
-				    "interface");
-		}
-		return rc; // ---------->
-	}
-	
-	if ( NULL == ip_address )
-		ip_address = UpnpGetServerIpAddress();
-	if ( 0 == port )
-		port = UpnpGetServerPort();
-	
-	Log_Printf (LOG_INFO, "UPnP Initialized (%s:%d)", 
-		    NN(ip_address), port);
-	
-	Log_Printf (LOG_DEBUG, "Registering Control Point" );
-	rc = UpnpRegisterClient (EventHandlerCallback,
-				 &g_ctrlpt_handle, &g_ctrlpt_handle);
-	if( UPNP_E_SUCCESS != rc ) {
-		Log_Printf (LOG_ERROR, "Error registering CP: %d", rc);
-		UpnpFinish();
-		return rc; // ---------->
-	}
-	
-	Log_Printf (LOG_DEBUG, "Control Point Registered" );
-	
-	g_ssdp_target = talloc_strdup (NULL, ssdp_target);
-	
-
-	return rc;
-}
-
-
-/*****************************************************************************
- * DeviceList_Stop
- *****************************************************************************/
-int
-DeviceList_Stop (void)
-{
-	int rc;
-
-	/*
-	 * Reverse all "Start" operations
-	 */
-	
-	ithread_cancel (g_timer_thread);
-	
 	DeviceList_RemoveAll();
-	talloc_free (g_ssdp_target);
-	g_ssdp_target = NULL;
-
-	UpnpUnRegisterClient (g_ctrlpt_handle);
-	rc = UpnpFinish();
-	
-	ListDestroy (&GlobalDeviceList, /*freeItem=>*/ 0);
-	
-	ithread_mutex_destroy (&DeviceListMutex);
-	
-	gStateUpdateFun = 0;
-	
-	return rc;
+	ListDestroy(&GlobalDeviceList, 0);
 }
 

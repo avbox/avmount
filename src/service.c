@@ -106,13 +106,9 @@ Service_UnsubscribeEventURL (Service* serv)
 		/*
 		 * If we have a valid control SID, then unsubscribe 
 		 */
-		if (serv->iface == NULL) {
-			rc = UpnpUnSubscribe (serv->ctrlpt_handle, 
-				      serv->sid);
-		} else {
-			rc = ClientManager_UpnpUnSubscribe(serv->iface,
-				serv->ctrlpt_handle, serv->sid);
-		}
+		assert(serv->iface != NULL);
+		rc = ClientManager_UpnpUnSubscribe(serv->iface,
+			serv->ctrlpt_handle, serv->sid);
 		if ( UPNP_E_SUCCESS == rc ) {
 			Log_Printf(LOG_DEBUG, 
 				   "Unsubscribed from %s EventURL with SID=%s",
@@ -356,7 +352,7 @@ ActionError (Service* serv, const char* actionName,
 
 }
 
-
+#if 0
 /*****************************************************************************
  * Service_SendActionAsync
  *****************************************************************************/
@@ -415,7 +411,7 @@ Service_SendActionAsyncVa (const Service* serv,
   
   return Service_SendActionAsync (serv, callback, actionName, nb, params);
 }
-
+#endif
 
 /*****************************************************************************
  * Service_SendAction
@@ -445,14 +441,14 @@ Service_SendAction (Service* serv,
     } else {
       // Send action request
       *response = NULL;
-			if (serv->iface == NULL) {
-	      rc = UpnpSendAction (serv->ctrlpt_handle, serv->controlURL,
-				   serv->serviceType, NULL, actionNode,
+      if (serv->iface == NULL) {
+        rc = UpnpSendAction (serv->ctrlpt_handle, serv->controlURL,
+        serv->serviceType, NULL, actionNode,
 				   response);
-			} else {
-				rc = ClientManager_UpnpSendAction(serv->iface, serv->ctrlpt_handle,
-					serv->controlURL, serv->serviceType, NULL, actionNode, response);
-			}
+      } else {
+        rc = ClientManager_UpnpSendAction(serv->iface, serv->ctrlpt_handle,
+          serv->controlURL, serv->serviceType, NULL, actionNode, response);
+      }
       ActionError (serv, actionName, rc, response);
       ixmlDocument_free (actionNode);
       actionNode = NULL;

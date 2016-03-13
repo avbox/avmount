@@ -81,7 +81,7 @@ Service_Create (void* context,
 int
 Service_SubscribeEventURL (const char *iface, Service* serv);
 
-
+#if 0
 /*****************************************************************************
  * @brief Send an Action request to the specified service of a device
  *	  (asynchronous call).
@@ -111,7 +111,7 @@ Service_SendActionAsync (const Service* serv, Upnp_FunPtr callback,
 int 
 Service_SendActionAsyncVa (const Service* serv,Upnp_FunPtr callback,
 			   const char* actionName, ...);
-
+#endif
 
 /*****************************************************************************
  * @brief Send an Action request to the specified service of a device

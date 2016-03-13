@@ -51,10 +51,7 @@
 #include "charset.h"
 #include "minmax.h"
 #include "clientmgr.h"
-
-#if USE_CURL
-#include "curl_util.h"
-#endif
+#include "stream.h"
 
 /*****************************************************************************
  * Configuration related to specific FUSE versions
@@ -483,26 +480,34 @@ static struct fuse_operations fs_oper = {
 static FILE *logf = NULL;
 
 static void
-stdout_print (Log_Level level, const char* msg)
+__stdout_print (FILE* f, Log_Level level, const char* msg)
 {
-	Log_BeginColor (level, logf);
+	Log_BeginColor (level, f);
 	switch (level) {
-	case LOG_ERROR:		fprintf (logf, "[E] "); break;
-	case LOG_WARNING:	fprintf (logf, "[W] "); break;
-	case LOG_INFO:		fprintf (logf, "[I] "); break;
-	case LOG_DEBUG:		fprintf (logf, "[D] "); break;
+	case LOG_ERROR:		fprintf (f, "[E] "); break;
+	case LOG_WARNING:	fprintf (f, "[W] "); break;
+	case LOG_INFO:		fprintf (f, "[I] "); break;
+	case LOG_DEBUG:		fprintf (f, "[D] "); break;
 	default:
-		fprintf (logf, "[%d] ", (int) level);
+		fprintf (f, "[%d] ", (int) level);
 		break;
 	}
 	
 	// Convert message to display charset, and print
-	Charset_PrintString (CHARSET_FROM_UTF8, msg, logf);
-	Log_EndColor (level, logf);
-	fprintf (logf, "\n");
-	fflush(logf);
+	Charset_PrintString (CHARSET_FROM_UTF8, msg, f);
+	Log_EndColor (level, f);
+	fprintf (f, "\n");
+	fflush(f);
 }
 
+static void
+stdout_print(Log_Level level, const char *msg)
+{
+	__stdout_print(logf, level, msg);
+	if (logf != stdout && level <= LOG_INFO) {
+		__stdout_print(stdout, level, msg);
+	}
+}
 
 /*****************************************************************************
  * Usage
@@ -816,28 +821,15 @@ main (int argc, char *argv[])
 		}
 	}
 	
-#if USE_CURL
 	/*
 	 * Initialie cURL
 	 */
-	CurlUtil_Init();
-#endif
+	Stream_Init();
 
 	/*
 	 * Initialise UPnP Control point and starts FUSE file system
 	 */
-
-#if 1
 	ClientManager_Start();
-#else
-	rc = DeviceList_Start (CONTENT_DIR_SERVICE_TYPE, NULL);
-	if (rc != UPNP_E_SUCCESS) {
-		Log_Printf (LOG_ERROR, 
-			    "Error starting UPnP Control Point : %d (%s)",
-			    rc, UpnpGetErrorMessage (rc));
-		exit (rc); // ---------->
-	}
-#endif
 
 	fuse_argv[fuse_argc] = NULL; // End FUSE arguments list
 	rc = fuse_main (fuse_argc, fuse_argv, &fs_oper);
@@ -846,12 +838,8 @@ main (int argc, char *argv[])
 	}
 	
 	Log_Printf (LOG_DEBUG, "Shutting down ...");
-#if 1
+
 	ClientManager_Stop();
-#else
-	DeviceList_Stop();
-#endif
-	
 	(void) Charset_Finish();
 	Log_Finish();
 

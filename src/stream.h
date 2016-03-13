@@ -1,5 +1,5 @@
 /*
- * curl_util.h : access to the content of a remote file.
+ * stream.h : access to the content of a remote file.
  * This file is part of avmount.
  *
  * (C) Copyright 2016 Fernando Rodriguez
@@ -19,42 +19,42 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
-#ifndef __CURL_UTIL__
-#define __CURL_UTIL__
+#ifndef __STREAM_H__
+#define __STREAM_H__
 
 /**
  * File handle structure
  */
-typedef struct _CurlUtil_File CurlUtil_File;
+typedef struct _Stream Stream;
 
 /**
  * Initialize the cURL library.
  */
 void
-CurlUtil_Init();
+Stream_Init();
 
 /**
  * Opens a URL for streaming
  */
-CurlUtil_File*
-CurlUtil_Open(const char *url);
+Stream*
+Stream_Open(const char *url);
 
 /**
  * Reads data from a network stream
  */
 ssize_t
-CurlUtil_Read(CurlUtil_File *file, void *ptr, size_t size);
+Stream_Read(Stream *file, void *ptr, size_t size);
 
 /**
  * Seek the network stream
  */
 void
-CurlUtil_Seek(CurlUtil_File *file, off_t offset);
+Stream_Seek(Stream *file, off_t offset);
 
 /**
  * Closes a URL
  */
 void
-CurlUtil_Close(CurlUtil_File *file);
+Stream_Close(Stream *file);
 
 #endif

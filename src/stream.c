@@ -1,6 +1,6 @@
 /*
- * curl_util.c : access to the content of a remote file.
- * This file is part of djmount.
+ * stream.c : access to the content of a remote file.
+ * This file is part of avmount.
  *
  * (C) Copyright 2016 Fernando Rodriguez
  *
@@ -30,17 +30,17 @@
 #include "log.h"
 #include "minmax.h"
 
-#define MB 										(1024 * 1024)
-#define KB										(1024)
+#define MB 			(1024 * 1024)
+#define KB			(1024)
 
-#define ENABLE_READAHEAD 			(1)
-#define READAHEAD_BUFSZ_START (64 * KB)
+#define ENABLE_READAHEAD 	(1)
+#define READAHEAD_BUFSZ_START 	(64 * KB)
 #define READAHEAD_BUFSZ_STEP	( 2 * MB)
-#define READAHEAD_BUFSZ_MAX		((10 * MB) + READAHEAD_BUFSZ_START)
+#define READAHEAD_BUFSZ_MAX	((10 * MB) + READAHEAD_BUFSZ_START)
 #define READAHEAD_CHUNK_SIZE	(8 * KB)
-#define READAHEAD_TRESHOLD		(5)
-#define READAHEAD_FSEEK_MAX   (64 * KB)
-#define RETRIES_MAX						(3)
+#define READAHEAD_TRESHOLD	(5)
+#define READAHEAD_FSEEK_MAX   	(64 * KB)
+#define RETRIES_MAX		(3)
 
 #if ENABLE_READAHEAD
 #include <pthread.h>
@@ -48,7 +48,7 @@
 #endif
 
 /* cURL file handle */
-struct _CurlUtil_File
+struct _Stream
 {
 	CURL*  handle;
 	CURLM* multi_handle;
@@ -81,25 +81,25 @@ struct _CurlUtil_File
 #endif
 };
 
-typedef struct _CurlUtil_File CurlUtil_File;
+typedef struct _Stream Stream;
 
 /* curl callback structure */
-struct _CurlUtil_CallbackData
+struct _Stream_CallbackData
 {
 	char* buf;
 	size_t avail;
 	size_t rem;
-	CurlUtil_File *file;
+	Stream *file;
 };
 
 /**
- * CurlUtil_WriteCallback() -- cURL callback routine
+ * Stream_WriteCallback() -- cURL callback routine
  */
 static size_t
-CurlUtil_WriteCallback(char *buffer, size_t size, size_t nitems, void *userp)
+Stream_WriteCallback(char *buffer, size_t size, size_t nitems, void *userp)
 {
-	struct _CurlUtil_CallbackData *cbdata = (struct _CurlUtil_CallbackData*) userp;
-	CurlUtil_File *file = cbdata->file;
+	struct _Stream_CallbackData *cbdata = (struct _Stream_CallbackData*) userp;
+	Stream *file = cbdata->file;
 	size_t bytes_to_copy;
 	size_t sz = (size = (size * nitems));
 
@@ -145,15 +145,15 @@ CurlUtil_WriteCallback(char *buffer, size_t size, size_t nitems, void *userp)
 }
 
 /**
- * CurlUtil_FillBuffer() -- Attempt to fill buffer with streamed data
+ * Stream_FillBuffer() -- Attempt to fill buffer with streamed data
  */
 static size_t
-CurlUtil_FillBuffer(CurlUtil_File *file, char *buffer, size_t size)
+Stream_FillBuffer(Stream *file, char *buffer, size_t size)
 {
 	CURLMcode mc;
 	fd_set fdread, fdwrite, fdexcep;
 	struct timeval timeout;
-	struct _CurlUtil_CallbackData cbdata;
+	struct _Stream_CallbackData cbdata;
 	int rc;
 	int still_running = 0;
 
@@ -197,7 +197,7 @@ CurlUtil_FillBuffer(CurlUtil_File *file, char *buffer, size_t size)
 		file->connected = still_running;
 		if (!still_running) {
 			if (cbdata.avail == 0) {
-				Log_Printf(LOG_ERROR, "CurlUtil_FillBuffer() -- Http Connection Failed!");
+				Log_Printf(LOG_ERROR, "Stream_FillBuffer() -- Http Connection Failed!");
 				curl_multi_remove_handle(file->multi_handle, file->handle);
 				curl_easy_cleanup(file->handle);
 				file->handle = NULL;
@@ -249,7 +249,7 @@ CurlUtil_FillBuffer(CurlUtil_File *file, char *buffer, size_t size)
 			while ((rc = curl_multi_perform(file->multi_handle, &still_running)) ==
 				CURLM_CALL_MULTI_PERFORM);
 			if (rc != CURLM_OK) {
-				Log_Printf(LOG_ERROR, "CurlUtil_FillBuffer() -- "
+				Log_Printf(LOG_ERROR, "Stream_FillBuffer() -- "
 					"curl_multi_perform() returned %i", rc);
 			}
 			if (!still_running) {
@@ -257,7 +257,7 @@ CurlUtil_FillBuffer(CurlUtil_File *file, char *buffer, size_t size)
 				int msgcnt;
 				while ((m = curl_multi_info_read(file->multi_handle, &msgcnt)) != NULL) {
 					assert(msgcnt == 0);
-					Log_Printf(LOG_DEBUG, "CurlUtil_FillBuffer() -- "
+					Log_Printf(LOG_DEBUG, "Stream_FillBuffer() -- "
 						"curl: msg=%i result=%i", m->msg, m->data.result);
 					file->result = m->data.result;
 				}
@@ -270,25 +270,25 @@ CurlUtil_FillBuffer(CurlUtil_File *file, char *buffer, size_t size)
 }
 
 /**
- * CurlUtil_Init()
+ * Stream_Init()
  */
 void
-CurlUtil_Init()
+Stream_Init()
 {
 	curl_global_init(CURL_GLOBAL_DEFAULT);
 }
 
 /**
- * CurlUtil_Open()
+ * Stream_Open()
  */
-CurlUtil_File*
-CurlUtil_Open(const char *url)
+Stream*
+Stream_Open(const char *url)
 {
-	CurlUtil_File *file;
+	Stream *file;
 
-	Log_Printf(LOG_DEBUG, "CurlUtil_Open(%s)", url);
+	Log_Printf(LOG_DEBUG, "Stream_Open(%s)", url);
 
-	if ((file = malloc(sizeof(CurlUtil_File))) == NULL) {
+	if ((file = malloc(sizeof(Stream))) == NULL) {
 		Log_Printf(LOG_ERROR, "malloc() failed");
 		return NULL;
 	}
@@ -324,23 +324,23 @@ CurlUtil_Open(const char *url)
 	curl_easy_setopt (file->handle, CURLOPT_URL, url);
 	curl_easy_setopt (file->handle, CURLOPT_VERBOSE, 0L);
 	curl_easy_setopt (file->handle, CURLOPT_NOSIGNAL, 1L);
-	curl_easy_setopt (file->handle, CURLOPT_WRITEFUNCTION, CurlUtil_WriteCallback);
+	curl_easy_setopt (file->handle, CURLOPT_WRITEFUNCTION, Stream_WriteCallback);
 	curl_easy_setopt (file->handle, CURLOPT_USERAGENT, "avmount/0.8");
 	curl_multi_add_handle(file->multi_handle, file->handle);
 	return file;
 }
 
 /**
- * CurlUtil_Seek()
+ * Stream_Seek()
  */
 void
-CurlUtil_Seek(CurlUtil_File *file, off_t offset)
+Stream_Seek(Stream *file, off_t offset)
 {
-	Log_Printf(LOG_DEBUG, "CurlUtil_Seek(%lx, %zd)",
+	Log_Printf(LOG_DEBUG, "Stream_Seek(%lx, %zd)",
 		(unsigned long) file, offset);
 
 #if 0
-	Log_Printf(LOG_ERROR, "CurlUtil_Seek: running=%i seekto=%zd abort=%i",
+	Log_Printf(LOG_ERROR, "Stream_Seek: running=%i seekto=%zd abort=%i",
 		file->ra_running, file->ra_seekto, file->ra_abort);
 #endif
 
@@ -379,10 +379,10 @@ CurlUtil_Seek(CurlUtil_File *file, off_t offset)
 
 #if ENABLE_READAHEAD
 static void*
-CurlUtil_ReadAhead(void *f)
+Stream_ReadAhead(void *f)
 {
 	char *ptr = NULL;
-	CurlUtil_File *file = (CurlUtil_File*) f;
+	Stream *file = (Stream*) f;
 
 	if (file->ra_buf == NULL) {
 		Log_Printf(LOG_DEBUG, "ReadAhead(file=%lx): Mapping %zd KiB buffer...",
@@ -390,7 +390,7 @@ CurlUtil_ReadAhead(void *f)
 		file->ra_buf = mmap(NULL, READAHEAD_BUFSZ_MAX,
 			PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 		if (file->ra_buf == NULL) {
-			Log_Printf(LOG_ERROR, "CurlUtil_ReadAhead() -- malloc() failed");
+			Log_Printf(LOG_ERROR, "Stream_ReadAhead() -- malloc() failed");
 			goto THREAD_EXIT;
 		}
 		file->ra_bufend = file->ra_buf + READAHEAD_BUFSZ_START;
@@ -442,22 +442,22 @@ READAHEAD_START:
 #undef CALC_CHUNKSZ
 
 		/* read the chunk */
-		if ((bytes_read = CurlUtil_FillBuffer(file, ptr, chunksz)) == -1) {
-			Log_Printf(LOG_DEBUG, "CurlUtil_ReadAhead: CurlUtil_FillBuffer returned %zd",
+		if ((bytes_read = Stream_FillBuffer(file, ptr, chunksz)) == -1) {
+			Log_Printf(LOG_DEBUG, "Stream_ReadAhead: Stream_FillBuffer returned %zd",
 				bytes_read);
 			switch (file->result) {
 			case CURLE_OK:
 				goto THREAD_EXIT;
 
 			case CURLE_COULDNT_CONNECT:
-				Log_Printf(LOG_DEBUG, "CurlUtil_ReadAhead: Sleeping...");
+				Log_Printf(LOG_DEBUG, "Stream_ReadAhead: Sleeping...");
 				sleep(5);
 				/* fall through */
 
 			default:
 				file->connected = 0;
 				if (file->retries++ <= RETRIES_MAX) {
-					Log_Printf(LOG_DEBUG, "CurlUtil_ReadAhead: Retrying... (file=%lx)",
+					Log_Printf(LOG_DEBUG, "Stream_ReadAhead: Retrying... (file=%lx)",
 						(unsigned long) file);
 					goto READAHEAD_START;
 				} else {
@@ -486,7 +486,7 @@ READAHEAD_START:
 		}
 
 #if 0
-		Log_Printf(LOG_ERROR, "CurlUtil_ReadAhead(%lx): W: %zd | R: %zd | A: %zd",
+		Log_Printf(LOG_ERROR, "Stream_ReadAhead(%lx): W: %zd | R: %zd | A: %zd",
 			(unsigned long) file, file->ra_wants, chunksz, file->ra_avail);
 #endif
 	}
@@ -494,15 +494,15 @@ READAHEAD_START:
 THREAD_EXIT:
 	pthread_mutex_lock(&file->ra_lock);
 
-	/* if a seek was requested call CurlUtil_Seek() and
+	/* if a seek was requested call Stream_Seek() and
 	 * return to the top of the loop */
 	if (file->ra_seekto != -1) {
-		Log_Printf(LOG_DEBUG, "CurlUtil_ReadAhead: Seeking to %zd",
+		Log_Printf(LOG_DEBUG, "Stream_ReadAhead: Seeking to %zd",
 			file->ra_seekto);
 		if (file->ra_seekto > file->offset) {
 			if (file->ra_seekto <= file->ra_offset) {
 				/* we already have the data */
-				Log_Printf(LOG_DEBUG, "CurlUtil_ReadAhead(file=%lx): In-buffer seek",
+				Log_Printf(LOG_DEBUG, "Stream_ReadAhead(file=%lx): In-buffer seek",
 					(unsigned long) file);
 				size_t bytes_to_skip = file->ra_seekto - file->offset;
 				file->ra_ptr += bytes_to_skip;
@@ -517,7 +517,7 @@ THREAD_EXIT:
 				goto READAHEAD_START;
 			} else if ((file->ra_seekto - file->ra_offset) < READAHEAD_FSEEK_MAX) {
 				/* short seek */
-				Log_Printf(LOG_DEBUG, "CurlUtil_ReadAhead(file=%lx): Short seek",
+				Log_Printf(LOG_DEBUG, "Stream_ReadAhead(file=%lx): Short seek",
 					(unsigned long) file);
 				size_t bytes_to_skip = file->ra_seekto - file->ra_offset;
 				size_t bytes_read = 0;
@@ -529,7 +529,7 @@ THREAD_EXIT:
 
 				assert(bytes_to_skip > 0);
 
-				if ((bytes_read = CurlUtil_FillBuffer(file, NULL, bytes_to_skip)) == -1) {
+				if ((bytes_read = Stream_FillBuffer(file, NULL, bytes_to_skip)) == -1) {
 					pthread_mutex_unlock(&file->ra_lock);
 					goto THREAD_EXIT;
 				}
@@ -540,13 +540,13 @@ THREAD_EXIT:
 			}
 		}
 		file->ra_running = 0;
-		CurlUtil_Seek(file, file->ra_seekto);
+		Stream_Seek(file, file->ra_seekto);
 		READAHEAD_INIT();
 		pthread_mutex_unlock(&file->ra_lock);
 		goto READAHEAD_START;
 	}
 
-	Log_Printf(LOG_DEBUG, "CurlUtil_ReadAhead(%lx): "
+	Log_Printf(LOG_DEBUG, "Stream_ReadAhead(%lx): "
 		"Exited (abort=%i avail=%zd bufcnt=%zd offset=%zd)",
 		(unsigned long) file, file->ra_abort, file->ra_avail,
 		file->bufcnt, file->offset);
@@ -563,12 +563,12 @@ THREAD_EXIT:
 #endif
 
 /**
- * CurlUtil_Read()
+ * Stream_Read()
  */
 ssize_t
-CurlUtil_Read(CurlUtil_File *file, void *ptr, size_t size)
+Stream_Read(Stream *file, void *ptr, size_t size)
 {
-	Log_Printf(LOG_DEBUG, "CurlUtil_Read(%lx, %lx, %zd) - offset=%zd",
+	Log_Printf(LOG_DEBUG, "Stream_Read(%lx, %lx, %zd) - offset=%zd",
 		(unsigned long) file, (unsigned long) ptr, size, file->offset);
 
 	if (size == 0) {
@@ -588,8 +588,8 @@ CurlUtil_Read(CurlUtil_File *file, void *ptr, size_t size)
 	if (!file->ra_running && file->ra_avail == 0) {
 		assert(file->ra_abort == 0);
 		pthread_mutex_lock(&file->ra_lock);
-		if (pthread_create(&file->ra_thread, NULL, CurlUtil_ReadAhead, (void*) file)) {
-			Log_Printf(LOG_ERROR, "CurlUtil_Read() -- pthread_create() failed!");
+		if (pthread_create(&file->ra_thread, NULL, Stream_ReadAhead, (void*) file)) {
+			Log_Printf(LOG_ERROR, "Stream_Read() -- pthread_create() failed!");
 			return -1;
 		}
 		pthread_cond_wait(&file->ra_signal, &file->ra_lock);
@@ -613,22 +613,22 @@ CurlUtil_Read(CurlUtil_File *file, void *ptr, size_t size)
 					pthread_mutex_unlock(&file->ra_lock);
 					if (bytes_read == 0) {
 						if (file->result == CURLE_OK && !file->eof) {
-							Log_Printf(LOG_DEBUG, "CurlUtil_Read: Returning 0 (eof)");
+							Log_Printf(LOG_DEBUG, "Stream_Read: Returning 0 (eof)");
 							file->eof = 1;
 							return 0;
 						}
-						Log_Printf(LOG_ERROR, "CurlUtil: Read failed! (result=%i retries=%i)",
+						Log_Printf(LOG_ERROR, "Stream: Read failed! (result=%i retries=%i)",
 							file->result, file->retries);
 						return -1;
 					} else {
-						Log_Printf(LOG_DEBUG, "CurlUtil: Requested %zd but got %zd",
+						Log_Printf(LOG_DEBUG, "Stream: Requested %zd but got %zd",
 							size, bytes_read);
 						file->offset += bytes_read;
 						return bytes_read;
 					}
 				}
 				if (file->ra_reads > READAHEAD_TRESHOLD) {
-					Log_Printf(LOG_DEBUG, "CurlUtil_Read(%lx): Waiting for data!",
+					Log_Printf(LOG_DEBUG, "Stream_Read(%lx): Waiting for data!",
 						(unsigned long) file);
 					if (file->ra_growbuf == 0) {
 						file->ra_growbuf = 1;
@@ -672,7 +672,7 @@ CurlUtil_Read(CurlUtil_File *file, void *ptr, size_t size)
 		assert(file->ra_wants == (size - bytes_read));
 
 #if 0
-		Log_Printf(LOG_ERROR, "CurlUtil_Read(%lx, %lx, %zd): +%zd | %zd",
+		Log_Printf(LOG_ERROR, "Stream_Read(%lx, %lx, %zd): +%zd | %zd",
 			(unsigned long) file, (unsigned long) ptr, size, chunksz, bytes_read);
 #endif
 	}
@@ -681,7 +681,7 @@ CurlUtil_Read(CurlUtil_File *file, void *ptr, size_t size)
 	return bytes_read;
 #else
 	size_t bytes_read;
-	if ((bytes_read = CurlUtil_FillBuffer(file, ptr, size)) == -1) {
+	if ((bytes_read = Stream_FillBuffer(file, ptr, size)) == -1) {
 		return -1;
 	}
 	if (bytes_read < size) {
@@ -692,16 +692,16 @@ CurlUtil_Read(CurlUtil_File *file, void *ptr, size_t size)
 }
 
 /**
- * CurlUtil_Close()
+ * Stream_Close()
  */
 void
-CurlUtil_Close(CurlUtil_File *file)
+Stream_Close(Stream *file)
 {
-	Log_Printf(LOG_DEBUG, "CurlUtil_Close(%lx)", (unsigned long) file);
-	Log_Printf(LOG_DEBUG, "CurlUtil: Buffer size: %zd", file->bufsz);
+	Log_Printf(LOG_DEBUG, "Stream_Close(%lx)", (unsigned long) file);
+	Log_Printf(LOG_DEBUG, "Stream: Buffer size: %zd", file->bufsz);
 
 #if ENABLE_READAHEAD
-	Log_Printf(LOG_DEBUG, "CurlUtil: Readahead buffer size: %zd",
+	Log_Printf(LOG_DEBUG, "Stream: Readahead buffer size: %zd",
 		(file->ra_bufend - file->ra_buf));
 
 	if (file->ra_running) {

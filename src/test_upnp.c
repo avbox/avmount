@@ -24,6 +24,13 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  */
  
+#if 1
+int
+main()
+{
+	return 0;
+}
+#else
 #include <config.h>
 
 #include "device_list.h"
@@ -539,3 +546,4 @@ main (int argc, char** argv)
 
   exit (rc);
 }
+#endif

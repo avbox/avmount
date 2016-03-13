@@ -71,7 +71,7 @@ export PKG_CONFIG_PATH=$PKG_CONFIG_PATH:/usr/local/lib/pkgconfig
 #
 if test x"$enable_debug" = xyes; then
 	# AC_PROG_CC already sets CFLAGS to "-g -O2" by default
-	CFLAGS="$CFLAGS -ggdb"
+	CFLAGS="$CFLAGS -O0 -ggdb"
 else
 	# add optimise for size
 	CFLAGS="$CFLAGS -Os"
@@ -254,17 +254,10 @@ FUSE_CFLAGS="$FUSE_CFLAGS -DFUSE_USE_VERSION=22"
 
 AM_CONDITIONAL(INTERNAL_LIBUPNP, false)
 
-AC_ARG_WITH([curl],
-	[Use libcurl for streaming])
-AM_CONDITIONAL(WITH_CURL, test x"$with_curl" = xyes)
-if test x"$with_curl" = xyes; then
-	AX_LIB_CURL([7.45.0],,
-		[AC_MSG_ERROR([Your system lacks libcurl >= 7.45.0])])
-	LDFLAGS="$LDFLAGS -lcurl"
-	AC_DEFINE([USE_CURL], 1, [Define to 1 to use libcurl])
-else
-	AC_DEFINE([USE_CURL], 0, [Define to 1 to use libcurl])
-fi
+AX_LIB_CURL([7.45.0],,
+	[AC_MSG_ERROR([Your system lacks libcurl >= 7.45.0])])
+LDFLAGS="$LDFLAGS -lcurl"
+AC_DEFINE([USE_CURL], 1, [Define to 1 to use libcurl])
 
 #
 # Output Makefiles

@@ -275,8 +275,7 @@ BrowseChildren (DJFS* const self, const char* const sub_path,
 	    off_t const res_size = MediaFile_GetResSize (&file);
 	    if ( file.playlist &&
 		 ( (self->flags & DJFS_USE_PLAYLISTS) ||
-		   res_size < 0 ||
-		   (USE_CURL == 0 && res_size > FILE_BUFFER_MAX_CONTENT_LENGTH)) ) {
+		   res_size < 0) ) {
 	      char* name = MediaFile_GetName (tmp_ctx, o, file.playlist);
 	      FILE_BEGIN (name) {
 		const char* const str = MediaFile_GetPlaylistContent 

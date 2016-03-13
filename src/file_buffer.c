@@ -29,6 +29,7 @@
 #include "talloc_util.h"
 #include "log.h"
 #include "minmax.h"
+#include "stream.h"
 
 #include <string.h>
 #include <errno.h>
@@ -43,9 +44,6 @@
 #	define HTTP_DEFAULT_TIMEOUT	30
 #endif
 
-#if USE_CURL
-#include "curl_util.h"
-#endif
 
 struct _FileBuffer {
 	bool		exact_read;
@@ -53,11 +51,7 @@ struct _FileBuffer {
 	const char*	url;
 	const char*	content;
 	off_t	     	offset;
-#if USE_CURL
-	CurlUtil_File*  handle;
-#else
-	void*		    handle;
-#endif
+	Stream*  	handle;
 };
 
 /******************************************************************************
@@ -184,10 +178,9 @@ FileBuffer_Read (FileBuffer* file, char* buffer,
 			}
 		}
 
-#if USE_CURL
 		if (file->handle == NULL) {
 			Log_Printf(LOG_DEBUG, "Opening %s", file->url);
-			file->handle = CurlUtil_Open(file->url);
+			file->handle = Stream_Open(file->url);
 			file->offset = 0;
 			if (file->handle == NULL) {
 				Log_Printf(LOG_ERROR, "curl_open() failed");
@@ -195,115 +188,18 @@ FileBuffer_Read (FileBuffer* file, char* buffer,
 			}
 		}
 		if (file->offset != offset) {
-			CurlUtil_Seek(file->handle, offset);
+			Stream_Seek(file->handle, offset);
 			file->offset = offset;
 		}
 		do {
 			ssize_t read_size = size - n;
-			if ((read_size = CurlUtil_Read(file->handle, buffer, read_size)) < 0) {
-				Log_Printf(LOG_ERROR, "CurlUtil_Read() returned %zd", n);
+			if ((read_size = Stream_Read(file->handle, buffer, read_size)) < 0) {
+				Log_Printf(LOG_ERROR, "Stream_Read() returned %zd", n);
 				return -EIO;
 			}
 			n += read_size;
 			file->offset += read_size;
 		} while (file->exact_read && n < size);
-#else
-		Log_Printf (LOG_DEBUG, "GetHttp url '%s' size %" PRIdMAX
-			    " offset %" PRIdMAX " (file_size %" PRIdMAX ")",
-			    file->url, (intmax_t) size, (intmax_t) offset,
-			    (intmax_t) file->file_size);
-
-		/*
-		 * Warning : the libupnp API (UpnpOpenHttpGetEx, 
-		 * UpnpReadHttpGet ...) has strange prototypes for length 
-		 * and ranges : "int" is not sufficient for large files !
-		 */
-		if (offset > FILE_BUFFER_MAX_CONTENT_LENGTH ||
-		    offset > FILE_BUFFER_MAX_CONTENT_LENGTH - size) {
-			Log_Printf (LOG_ERROR, 
-				    "GetHttp url '%s' overflowed "
-				    "size %" PRIdMAX " or offset %" PRIdMAX,
-				    file->url, (intmax_t) size, 
-				    (intmax_t) offset);
-			return -EOVERFLOW; // ---------->
-		}
-
-		int rc;
-		int contentLength = 0;
-		int httpStatus    = 0;
-		bool freshStream  = false;
-		char* contentType = NULL;
-
-		if (file->handle == NULL || file->offset != offset) {
-		HTTP_CONNECT:
-			if (file->handle) {
-				(void) UpnpCloseHttpGet (file->handle);
-				file->handle = NULL;
-				Log_Printf(LOG_DEBUG, "Closed stream: %s", file->url);
-			}
-			rc = UpnpOpenHttpGetEx (file->url, &file->handle,
-						    &contentType, &contentLength,
-						    &httpStatus,
-						    offset, INT_MAX,
-						    HTTP_DEFAULT_TIMEOUT
-						    );
-			if (rc != UPNP_E_SUCCESS)
-				goto HTTP_CHECK; // ---------->
-			file->offset = offset;
-			freshStream = true;
-			Log_Printf(LOG_DEBUG, "Opened stream (offset=%i): %s", offset, file->url);
-		}
-
-		/*
-		 * Read available bytes, or all bytes requested if exact_read :
-		 * perform a loop because I am not sure that HTTP GET guaranty
-		 * to return the exact number of bytes requested.
-		 */
-		do {
-			size_t read_size = size - n;
-			if (n > 0) {
-				Log_Printf (LOG_DEBUG, 
-					    "UpnpReadHttpGet loop ! url '%s' "
-					    "read %" PRIdMAX " left %" PRIdMAX,
-					    file->url, (intmax_t) n, 
-					    (intmax_t) read_size);
-			}
-			
-			rc = UpnpReadHttpGet (file->handle, buffer + n, &read_size,
-					      HTTP_DEFAULT_TIMEOUT);
-			if (rc != UPNP_E_SUCCESS) {
-				if (!freshStream) {
-					goto HTTP_CONNECT;
-				}
-				(void) UpnpCloseHttpGet (file->handle);
-				file->handle = NULL;
-				goto HTTP_CHECK; // ---------->
-			}
-
-			// Prevent infinite loop (shouldn't happen though)
-			if (read_size == 0)
-				break; // ---------->
-			n += read_size;
-			file->offset += read_size;
-
-		} while (file->exact_read && n < size);
-
-	HTTP_CHECK:
-		if (rc != UPNP_E_SUCCESS) {
-			Log_Printf (LOG_ERROR, 
-				    "GetHttp url '%s' (size %" PRIdMAX 
-				    ", offset %" PRIdMAX ", file_size %" 
-				    PRIdMAX ") : error %d (%s)", 
-				    file->url, (intmax_t) size, 
-				    (intmax_t) offset, 
-				    (intmax_t) file->file_size, 
-				    rc, UpnpGetErrorMessage (rc));
-			switch (rc) {
-			case UPNP_E_OUTOF_MEMORY : 	n = -ENOMEM; break;
-			default:			n = -EIO;    break;
-			}
-		}
-#endif
 	}
 	return n;
 }
@@ -316,12 +212,8 @@ void
 FileBuffer_Close(FileBuffer *file)
 {
 	if (file->url && file->handle) {
-#if USE_CURL
-		Log_Printf (LOG_DEBUG, "Closed %s", file->url);
-		CurlUtil_Close (file->handle);
-#else
-		(void) UpnpCloseHttpGet (file->handle);
-#endif
+		Log_Printf (LOG_DEBUG, "Closing %s", file->url);
+		Stream_Close (file->handle);
 	}
 }
 

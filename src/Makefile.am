@@ -54,15 +54,12 @@ COMMON_SRCS 		= log.c object.c service.c \
 			  media_file.c file_buffer.c \
 			  content_dir.c vfs.c djfs.c upnp_util.c \
 			  string_util.c xml_util.c ptr_array.c talloc_util.c \
-			  cache.c clientmgr.c
+			  cache.c clientmgr.c stream.c
 if ENABLE_CHARSET
     COMMON_SRCS 	+= charset.c
 if !WANT_ICONV
     COMMON_SRCS 	+= charset_internal.c
 endif
-endif
-if WITH_CURL
-    COMMON_SRCS   += curl_util.c
 endif
 
 noinst_HEADERS		= \
