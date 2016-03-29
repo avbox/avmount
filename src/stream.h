@@ -57,4 +57,10 @@ Stream_Seek(Stream *file, off_t offset);
 void
 Stream_Close(Stream *file);
 
+/**
+ * Free all memory allocated by all streams.
+ */
+void
+Stream_FreeAll();
+
 #endif

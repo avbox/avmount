@@ -42,6 +42,7 @@
 #include "content_dir.h"
 #include "xml_util.h"
 #include "talloc_util.h"
+#include "stream.h"
 
 /*
  * Structure used to represent a network interface
@@ -78,6 +79,7 @@ command_t;
 
 static void *context = NULL;
 static int abort_mon = 0;
+static pid_t mainpid = 0;
 static struct iface_list ifaces = { NULL };
 static pthread_t monthread;
 
@@ -547,13 +549,12 @@ ClientManager_ProxyThread(void *data)
 		close(readfd[0]);
 		close(writefd[1]);
 
-		/* TODO: Free the device list, stream buffers, 
+		/*
+		 * Free the device list, stream buffers,
 		 * and all other memory not needed by the child
 		 */
-		#if 0
-		DeviceList_RemoveAll(1);
-		Stream_FreeAllBuffers();
-		#endif
+		Stream_FreeAll();
+		DeviceList_Destroy();
 
 		/* run the client */
 		ClientManager_ClientLoop(iface, eventsfd[1], writefd[0], readfd[1]);
@@ -857,6 +858,7 @@ ClientManager_MonitorInterfaces(void *arg)
 void
 ClientManager_Start()
 {
+	mainpid = getpid();
 	context = talloc_new(NULL);
 	if (context == NULL) {
 		Log_Printf(LOG_ERROR, "ClientManager: talloc_new() failed!");
@@ -923,6 +925,16 @@ ClientManager_UpnpUnSubscribe(const char *iface_name,
 	int ret;
 	const command_t cmd = CMD_UPNP_UNSUBSCRIBE;
 	struct iface_entry *iface;
+
+	/*
+	 * this function may be called by the destructors
+	 * when destroying the device list on a child process
+	 * so we just return success on that case
+	 */
+	if (getpid() != mainpid) {
+		return 0;
+	}
+
 	FIND_INTERFACE(iface, iface_name, return 0);
 	PIPE_WRITE_VALUE(iface->infd, cmd);
 	PIPE_WRITE_VALUE(iface->infd, handle);

@@ -26,6 +26,7 @@
 #include <errno.h>
 #include <assert.h>
 #include <unistd.h>
+#include <pthread.h>
 #include <curl/curl.h>
 #include "log.h"
 #include "minmax.h"
@@ -43,7 +44,6 @@
 #define RETRIES_MAX		(3)
 
 #if ENABLE_READAHEAD
-#include <pthread.h>
 #include <sys/mman.h>
 #endif
 
@@ -79,9 +79,21 @@ struct _Stream
 	int             ra_growbuf;
 	const char*     ra_bufend;
 #endif
+	struct _Stream *prev;
+	struct _Stream *next;
 };
 
 typedef struct _Stream Stream;
+
+typedef struct
+{
+	Stream *first;
+	Stream *last;
+}
+StreamList;
+
+static pthread_mutex_t streams_lock = PTHREAD_MUTEX_INITIALIZER;
+static StreamList streams = { NULL, NULL };
 
 /* curl callback structure */
 struct _Stream_CallbackData
@@ -91,6 +103,77 @@ struct _Stream_CallbackData
 	size_t rem;
 	Stream *file;
 };
+
+static void
+Stream_AddToList(Stream *stream)
+{
+	pthread_mutex_lock(&streams_lock);
+	if (streams.first == NULL || streams.last == NULL) {
+		assert(streams.first == streams.last);
+		streams.first = streams.last = stream;
+	} else {
+		stream->prev = streams.last;
+		streams.last->next = stream;
+		streams.last = stream;
+	}
+	pthread_mutex_unlock(&streams_lock);
+}
+
+static void
+Stream_RemoveFromList(Stream *stream)
+{
+	pthread_mutex_lock(&streams_lock);
+	if (stream->prev == NULL) {
+		assert(streams.first == stream);
+		streams.first = stream->next;
+	} else {
+		stream->prev->next = stream->next;
+	}
+	if (stream->next == NULL) {
+		assert(streams.last == stream);
+		streams.last = stream->prev;
+	} else {
+		stream->next->prev = stream->prev;
+	}
+	pthread_mutex_unlock(&streams_lock);
+}
+
+/**
+ * Stream_Free() -- Free's a stream handle and all it's
+ * associated buffers.
+ */
+static void
+Stream_Free(Stream *file)
+{
+#if ENABLE_READAHEAD == 1
+	if (file->ra_buf != NULL) {
+		munmap(file->ra_buf, READAHEAD_BUFSZ_MAX);
+	}
+#endif
+	if (file->buf) {
+		free(file->buf);
+	}
+	curl_multi_remove_handle(file->multi_handle, file->handle);
+	curl_easy_cleanup(file->handle);
+	curl_multi_cleanup(file->multi_handle);
+	free(file);
+}
+
+/**
+ * Stream_FreeAll() -- Free's all stream buffers. This
+ * should be called after forking by the child process.
+ */
+void
+Stream_FreeAll()
+{
+	Stream *file = streams.first;
+	while (file != NULL) {
+		Stream *next = file->next;
+		Stream_RemoveFromList(file);
+		Stream_Free(file);
+		file = next;
+	}
+}
 
 /**
  * Stream_WriteCallback() -- cURL callback routine
@@ -303,6 +386,8 @@ Stream_Open(const char *url)
 	file->offset = 0;
 	file->result = CURLE_OK;
 	file->retries = 0;
+	file->prev = NULL;
+	file->next = NULL;
 
 #if ENABLE_READAHEAD
 	file->ra_buf = NULL;
@@ -320,6 +405,8 @@ Stream_Open(const char *url)
 		Log_Printf(LOG_ERROR, "curl_easy_init() or curl_multi_init() failed");
 		return NULL;
 	}
+
+	Stream_AddToList(file);
 
 	curl_easy_setopt (file->handle, CURLOPT_URL, url);
 	curl_easy_setopt (file->handle, CURLOPT_VERBOSE, 0L);
@@ -712,14 +799,7 @@ Stream_Close(Stream *file)
 		pthread_join(file->ra_thread, NULL);
 		assert(file->ra_abort == 0);
 	}
-	if (file->ra_buf != NULL) {
-		munmap(file->ra_buf, READAHEAD_BUFSZ_MAX);
-	}
 #endif
-
-	curl_multi_remove_handle(file->multi_handle, file->handle);
-	curl_easy_cleanup(file->handle);
-	curl_multi_cleanup(file->multi_handle);
-	free(file->buf);
-	free(file);
+	Stream_RemoveFromList(file);
+	Stream_Free(file);
 }
