@@ -57,6 +57,7 @@ struct iface_entry
 	pid_t pid;
 	pthread_t thread;
 	pthread_mutex_t mutex;
+	pthread_mutex_t event_lock;
 	UpnpClient_Handle handle;
 	struct iface_entry *prev;
 	struct iface_entry *next;
@@ -98,9 +99,7 @@ DeviceList_EventHandlerCallback(
 #define POLL_INTERVAL	(5)
 
 #define PROCESS_EVENT(iface, event_type, event_data, handle) \
-	pthread_mutex_lock(&iface->mutex); \
-	DeviceList_EventHandlerCallback(iface->name, event_type, event_data, handle); \
-	pthread_mutex_unlock(&iface->mutex);
+	DeviceList_EventHandlerCallback(iface->name, event_type, event_data, handle);
 
 #define FIND_INTERFACE(iface, name, onerror) \
 	iface = ClientManager_FindInterface(name); \
@@ -243,6 +242,8 @@ EventHandlerCallback (Upnp_EventType event_type,
 {
 	struct iface_entry *iface = (struct iface_entry*) cookie;
 
+	pthread_mutex_lock(&iface->event_lock);
+
 	PIPE_WRITE_VALUE(iface->eventsfd, event_type);
 	PIPE_WRITE_VALUE(iface->eventsfd, iface->handle);
 
@@ -289,6 +290,7 @@ EventHandlerCallback (Upnp_EventType event_type,
 	default:
 		break;
 	}
+	pthread_mutex_unlock(&iface->event_lock);
 	return 0;
 }
 
@@ -616,6 +618,11 @@ ClientManager_ProxyThread(void *data)
 static void
 ClientManager_RunClient(struct iface_entry *iface)
 {
+	if (pthread_mutex_init(&iface->event_lock, NULL) != 0) {
+		Log_Printf(LOG_ERROR, "ClientManager: Mutex initialization failed!");
+		iface->pid = -1;
+	}
+		
 	if (pthread_mutex_init(&iface->mutex, NULL) != 0) {
 		Log_Printf(LOG_ERROR, "ClientManager: Mutex initialization failed!");
 		iface->pid = -1;
@@ -683,7 +690,9 @@ ClientManager_RemoveInterface(struct iface_entry *entry)
 
 	if (entry->pid != -1) {
 		command_t cmd = CMD_UPNP_EXIT;
+		pthread_mutex_lock(&entry->mutex);
 		PIPE_WRITE_VALUE(entry->infd, cmd);
+		pthread_mutex_unlock(&entry->mutex);
 		pthread_join(entry->thread, NULL);
 	}
 
@@ -904,6 +913,12 @@ ClientManager_UpnpSubscribe(const char *iface_name,
 	struct iface_entry *iface;
 	tout = *timeout;
 	FIND_INTERFACE(iface, iface_name, return -1);
+
+	pthread_mutex_lock(&iface->mutex);
+	if (ClientManager_FindInterface(iface_name) != iface) {
+		pthread_mutex_unlock(&iface->mutex);
+		return -1;
+	}
 	PIPE_WRITE_VALUE(iface->infd, cmd);
 	PIPE_WRITE_VALUE(iface->infd, ctrlpt_handle);
 	PIPE_WRITE_STRING(iface->infd, eventURL);
@@ -911,6 +926,8 @@ ClientManager_UpnpSubscribe(const char *iface_name,
 	PIPE_READ_VALUE(iface->outfd, ret);
 	PIPE_READ_VALUE(iface->outfd, *timeout);
 	PIPE_READ_SID(iface->outfd, sid);
+	pthread_mutex_unlock(&iface->mutex);
+
 	return ret;
 }
 
@@ -936,10 +953,18 @@ ClientManager_UpnpUnSubscribe(const char *iface_name,
 	}
 
 	FIND_INTERFACE(iface, iface_name, return 0);
+
+	pthread_mutex_lock(&iface->mutex);
+	if (ClientManager_FindInterface(iface_name) != iface) {
+		pthread_mutex_unlock(&iface->mutex);
+		return 0;
+	}
 	PIPE_WRITE_VALUE(iface->infd, cmd);
 	PIPE_WRITE_VALUE(iface->infd, handle);
 	PIPE_WRITE_SID(iface->infd, sid);
 	PIPE_READ_VALUE(iface->outfd, ret);
+	pthread_mutex_unlock(&iface->mutex);
+
 	return ret;
 }
 
@@ -961,6 +986,12 @@ ClientManager_UpnpSendAction(const char *iface_name,
 	struct iface_entry *iface;
 	IXML_Document *doc = NULL;
 	FIND_INTERFACE(iface, iface_name, return -1);
+
+	pthread_mutex_lock(&iface->mutex);
+	if (ClientManager_FindInterface(iface_name) != iface) {
+		pthread_mutex_unlock(&iface->mutex);
+		return -1;
+	}
 	PIPE_WRITE_VALUE(iface->infd, cmd);
 	PIPE_WRITE_VALUE(iface->infd, handle);
 	PIPE_WRITE_STRING(iface->infd, actionURL);
@@ -968,6 +999,8 @@ ClientManager_UpnpSendAction(const char *iface_name,
 	PIPE_WRITE_XML(iface->infd, action);
 	PIPE_READ_VALUE(iface->outfd, ret);
 	PIPE_READ_XML(iface->outfd, doc);
+	pthread_mutex_unlock(&iface->mutex);
+
 	*resp = doc;
 	return ret;
 }
