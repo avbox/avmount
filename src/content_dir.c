@@ -345,6 +345,7 @@ cache_free_expired_data (const char* key, void* data)
 }
 
 
+#if 0
 /******************************************************************************
  * DestroyResult
  *****************************************************************************/
@@ -368,6 +369,7 @@ DestroyResult (BrowseResult* const br)
 	
 	return 0;
 }
+#endif
 
 
 /******************************************************************************
@@ -422,11 +424,21 @@ BrowseOrSearchWithCache (ContentDir* cds, void* result_context,
 				*cp = br->children;
 			}
 		}
+
+		/*
+		 * What is the purpose of this?
+		 * It causes the result to be leaked after a
+		 * cache hit! Maybe it was meant to go on the
+		 * else block above but I don't see why it's
+		 * necessary.
+		 */
+		#if 0
 		// Add a reference to the cached result before returning it
 		if (br->children) {
 			talloc_increase_ref_count (br->children);    
 			talloc_set_destructor (br, DestroyResult);
 		}
+		#endif
 		
 		ithread_mutex_unlock (&cds->cache_mutex);
 	}
