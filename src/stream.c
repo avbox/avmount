@@ -104,6 +104,9 @@ struct _Stream_CallbackData
 	Stream *file;
 };
 
+/**
+ * Stream_AddToList() -- Add stream to list.
+ */
 static void
 Stream_AddToList(Stream *stream)
 {
@@ -119,6 +122,9 @@ Stream_AddToList(Stream *stream)
 	pthread_mutex_unlock(&streams_lock);
 }
 
+/**
+ * Stream_RemoveFromList() -- Remove stream from list
+ */
 static void
 Stream_RemoveFromList(Stream *stream)
 {
@@ -160,11 +166,11 @@ Stream_Free(Stream *file)
 }
 
 /**
- * Stream_FreeAll() -- Free's all stream buffers. This
+ * Stream_Destroy() -- Free's all stream buffers. This
  * should be called after forking by the child process.
  */
 void
-Stream_FreeAll()
+Stream_Destroy()
 {
 	Stream *file = streams.first;
 	while (file != NULL) {

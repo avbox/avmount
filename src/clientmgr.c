@@ -108,6 +108,16 @@ DeviceList_EventHandlerCallback(
 		onerror; \
 	}
 
+#define LOCK_INTERFACE(iface, name, onerror) \
+	pthread_mutex_lock(&iface->mutex); \
+	if (ClientManager_FindInterface(name) != iface) { \
+		pthread_mutex_unlock(&iface->mutex); \
+		onerror; \
+	}
+
+#define UNLOCK_INTERFACE(iface) \
+	pthread_mutex_unlock(&iface->mutex);
+
 #define PIPE_WRITE_VALUE(fd, value) write_or_die(fd, &value, sizeof(value))
 
 #define PIPE_WRITE_STRING(fd, str) \
@@ -555,7 +565,7 @@ ClientManager_ProxyThread(void *data)
 		 * Free the device list, stream buffers,
 		 * and all other memory not needed by the child
 		 */
-		Stream_FreeAll();
+		Stream_Destroy();
 		DeviceList_Destroy();
 
 		/* run the client */
@@ -705,6 +715,8 @@ ClientManager_RemoveInterface(struct iface_entry *entry)
 	if (entry->next == NULL) {
 		assert(ifaces.last == entry);
 		ifaces.last = entry->prev;
+	} else {
+		entry->next->prev = entry->prev;
 	}
 	talloc_free(entry);
 }
@@ -908,26 +920,19 @@ int
 ClientManager_UpnpSubscribe(const char *iface_name,
 	UpnpClient_Handle ctrlpt_handle, char *eventURL, int *timeout, Upnp_SID sid)
 {
-	int ret, tout;
+	int ret;
 	const command_t cmd = CMD_UPNP_SUBSCRIBE;
 	struct iface_entry *iface;
-	tout = *timeout;
 	FIND_INTERFACE(iface, iface_name, return -1);
-
-	pthread_mutex_lock(&iface->mutex);
-	if (ClientManager_FindInterface(iface_name) != iface) {
-		pthread_mutex_unlock(&iface->mutex);
-		return -1;
-	}
+	LOCK_INTERFACE(iface, iface_name, return -1);
 	PIPE_WRITE_VALUE(iface->infd, cmd);
 	PIPE_WRITE_VALUE(iface->infd, ctrlpt_handle);
 	PIPE_WRITE_STRING(iface->infd, eventURL);
-	PIPE_WRITE_VALUE(iface->infd, tout);
+	PIPE_WRITE_VALUE(iface->infd, *timeout);
 	PIPE_READ_VALUE(iface->outfd, ret);
 	PIPE_READ_VALUE(iface->outfd, *timeout);
 	PIPE_READ_SID(iface->outfd, sid);
-	pthread_mutex_unlock(&iface->mutex);
-
+	UNLOCK_INTERFACE(iface);
 	return ret;
 }
 
@@ -953,17 +958,12 @@ ClientManager_UpnpUnSubscribe(const char *iface_name,
 	}
 
 	FIND_INTERFACE(iface, iface_name, return 0);
-
-	pthread_mutex_lock(&iface->mutex);
-	if (ClientManager_FindInterface(iface_name) != iface) {
-		pthread_mutex_unlock(&iface->mutex);
-		return 0;
-	}
+	LOCK_INTERFACE(iface, iface_name, return 0);
 	PIPE_WRITE_VALUE(iface->infd, cmd);
 	PIPE_WRITE_VALUE(iface->infd, handle);
 	PIPE_WRITE_SID(iface->infd, sid);
 	PIPE_READ_VALUE(iface->outfd, ret);
-	pthread_mutex_unlock(&iface->mutex);
+	UNLOCK_INTERFACE(iface);
 
 	return ret;
 }
@@ -986,12 +986,7 @@ ClientManager_UpnpSendAction(const char *iface_name,
 	struct iface_entry *iface;
 	IXML_Document *doc = NULL;
 	FIND_INTERFACE(iface, iface_name, return -1);
-
-	pthread_mutex_lock(&iface->mutex);
-	if (ClientManager_FindInterface(iface_name) != iface) {
-		pthread_mutex_unlock(&iface->mutex);
-		return -1;
-	}
+	LOCK_INTERFACE(iface, iface_name, return -1);
 	PIPE_WRITE_VALUE(iface->infd, cmd);
 	PIPE_WRITE_VALUE(iface->infd, handle);
 	PIPE_WRITE_STRING(iface->infd, actionURL);
@@ -999,8 +994,7 @@ ClientManager_UpnpSendAction(const char *iface_name,
 	PIPE_WRITE_XML(iface->infd, action);
 	PIPE_READ_VALUE(iface->outfd, ret);
 	PIPE_READ_XML(iface->outfd, doc);
-	pthread_mutex_unlock(&iface->mutex);
-
+	UNLOCK_INTERFACE(iface);
 	*resp = doc;
 	return ret;
 }

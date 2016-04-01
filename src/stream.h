@@ -61,6 +61,6 @@ Stream_Close(Stream *file);
  * Free all memory allocated by all streams.
  */
 void
-Stream_FreeAll();
+Stream_Destroy();
 
 #endif
