@@ -821,6 +821,15 @@ ClientManager_MonitorInterfaces(void *arg)
 				continue;
 			}
 
+			/*
+			 * Ignore sit interfaces.
+			 * TODO: Find a better way to detect usable
+			 * interfaces
+			 */
+			if (!memcmp("sit", dp->d_name, 3 * sizeof(char))) {
+				continue;
+			}
+
 			/* check operstate */
 			(void) snprintf(name, PATH_MAX, "/sys/class/net/%s/operstate", dp->d_name);
 			if ((fd = open(name, O_RDONLY)) == -1) {
