@@ -2,8 +2,9 @@
 /* $Id: service_p.h 185 2006-06-06 20:54:31Z r3mi $
  *
  * UPnP Service implementation (private / protected).
- * This file is part of djmount.
+ * This file is part of avmount.
  *
+ * (C) Copyright 2016 Fernando Rodriguez
  * (C) Copyright 2005 Rémi Turboult <r3mi@users.sourceforge.net>
  *
  * This program is free software; you can redistribute it and/or modify

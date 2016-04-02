@@ -2,8 +2,9 @@
 /* $Id: device_list.c 265 2006-08-27 17:53:14Z r3mi $
  *
  * DeviceList : List of UPnP Devices
- * This file is part of djmount.
+ * This file is part of avmount.
  *
+ * (C) Copyright 2016 Fernando Rodriguez
  * (C) Copyright 2005 Rémi Turboult <r3mi@users.sourceforge.net>
  *
  * Part derived from libupnp example (upnp/sample/tvctrlpt/upnp_tv_ctrlpt.c)

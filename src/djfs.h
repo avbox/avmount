@@ -1,9 +1,10 @@
 /* -*- Mode: C; tab-width: 8; indent-tabs-mode: t; c-basic-offset: 8 -*- */
 /* $Id: djfs.h 216 2006-07-09 17:32:37Z r3mi $
  *
- * djfs : file system implementation for djmount.
- * This file is part of djmount.
+ * djfs : file system implementation for avmount.
+ * This file is part of avmount.
  *
+ * (C) Copyright 2016 Fernando Rodriguez
  * (C) Copyright 2005-2006 Rémi Turboult <r3mi@users.sourceforge.net>
  *
  * This program is free software; you can redistribute it and/or modify

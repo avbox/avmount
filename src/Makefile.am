@@ -1,7 +1,8 @@
 # $Id: Makefile.am 256 2006-08-20 20:55:30Z r3mi $
 #
-# Makefile.am for djmount
+# Makefile.am for avmount
 #
+# (C) Copyright 2016 Fernando Rodriguez
 # (C) Copyright 2005 Rémi Turboult <r3mi@users.sourceforge.net>
 #
 # This program is free software; you can redistribute it and/or modify

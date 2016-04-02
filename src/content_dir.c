@@ -2,8 +2,9 @@
 /* $Id: content_dir.c 260 2006-08-26 14:07:29Z r3mi $
  *
  * UPnP Content Directory Service 
- * This file is part of djmount.
+ * This file is part of avmount.
  *
+ * (C) Copyright 2016 Fernando Rodriguez
  * (C) Copyright 2005 Rémi Turboult <r3mi@users.sourceforge.net>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -149,8 +150,9 @@ BrowseOrSearchAction (ContentDir* cds,
 	if (doc == NULL && rc == UPNP_E_SUCCESS)
 		rc = UPNP_E_BAD_RESPONSE;
 	if (rc != UPNP_E_SUCCESS) {
-		Log_Printf (LOG_ERROR, "BrowseOrSearchAction ObjectId='%s'",
-			    NN(objectId));
+		Log_Printf(LOG_ERROR, "ContentDir_BrowseOrSearchAction: "
+			"Service_SendActionVa() returned %i (ObjectId='%s')",
+			rc, NN(objectId));
 		goto cleanup; // ---------->
 	}
 	

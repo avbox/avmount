@@ -2,8 +2,9 @@
 /* $Id: didl_object.c 260 2006-08-26 14:07:29Z r3mi $
  *
  * DIDL-Lite object
- * This file is part of djmount.
+ * This file is part of avmount.
  *
+ * (C) Copyright 2016 Fernando Rodriguez
  * (C) Copyright 2005-2006 Rémi Turboult <r3mi@users.sourceforge.net>
  *
  * This program is free software; you can redistribute it and/or modify

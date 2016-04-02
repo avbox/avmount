@@ -1,8 +1,9 @@
 /* $Id: service.h 135 2006-01-12 21:47:43Z r3mi $
  *
  * UPnP Service
- * This file is part of djmount.
+ * This file is part of avmount.
  *
+ * (C) Copyright 2016 Fernando Rodriguez
  * (C) Copyright 2005 Rémi Turboult <r3mi@users.sourceforge.net>
  *
  * This program is free software; you can redistribute it and/or modify

@@ -2,8 +2,9 @@
 /* $Id: fuse_main.c 223 2006-07-25 19:43:02Z r3mi $
  *
  * main FUSE interface.
- * This file is part of djmount.
+ * This file is part of avmount.
  *
+ * (C) Copyright 2016 Fernando Rodriguez
  * (C) Copyright 2005 Rémi Turboult <r3mi@users.sourceforge.net>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -80,7 +81,7 @@
 
 
 /*****************************************************************************
- * Global djmount settings
+ * Global avmount settings
  *****************************************************************************/
 
 static const DJFS_Flags DEFAULT_DJFS_FLAGS = 
@@ -561,7 +562,7 @@ usage (FILE* stream, const char* progname)
 #if UPNP_HAVE_DEBUG
      "    upnperr, upnpall : increasing level of UPnP traces\n"
 #endif
-     "    error, warn, info, debug : increasing level of djmount traces\n"
+     "    error, warn, info, debug : increasing level of " PACKAGE " traces\n"
      "    fuse : activates FUSE traces\n"
      "    leak, leakfull : enable talloc leak reports at exit\n"
      "'-d' alone defaults to '" DEBUG_DEFAULT_LEVELS "' i.e. all traces.\n"
@@ -592,6 +593,7 @@ version (FILE* stream, const char* progname)
 {
 	fprintf (stream, 
 		 "%s (" PACKAGE ") " VERSION "\n", progname);
+	fprintf (stream, "Copyright (C) 2016 Fernando Rodriguez\n");
 	fprintf (stream, "Copyright (C) 2005 Rémi Turboult\n");
 	fprintf (stream, "Compiled against: ");
 	fprintf (stream, "FUSE %d.%d", FUSE_MAJOR_VERSION, 

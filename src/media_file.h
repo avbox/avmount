@@ -2,8 +2,9 @@
 /* $Id: media_file.h 132 2006-01-10 21:41:22Z r3mi $
  *
  * Get file information for the media files representing DIDL-Lite objects.
- * This file is part of djmount.
+ * This file is part of avmount.
  *
+ * (C) Copyright 2016 Fernando Rodriguez
  * (C) Copyright 2005 Rémi Turboult <r3mi@users.sourceforge.net>
  *
  * This program is free software; you can redistribute it and/or modify

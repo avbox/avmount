@@ -2,13 +2,14 @@
 avmount
 =======
 
-avmount - mount MediaServers content as a Linux filesystem.
+avmount - Mount MediaServers content as a Linux filesystem.
 Created 23/04/2005, Rémi Turboult <r3mi@users.sourceforge.net>
 
 
-avmount is a UPnP AV client. It mounts as a Linux filesystem (using FUSE)
-the media content of compatible UPnP AV devices (see "Known Compatible Devices"
-paragraph below).
+avmount is a UPnP AV client based on djmount. Originally created
+by Rémi Turboult <r3mi@users.sourceforge.net> on 23/04/2005. It mounts as a
+Linux filesystem (using FUSE) the media content of compatible UPnP AV devices
+(see "Known Compatible Devices" paragraph below).
 
 avmount discovers automatically all UPnP AV Media Servers on the network,
 and make the content available in a directory tree. All shared files 
@@ -34,7 +35,6 @@ $ cd /mnt/av
 $ ls -l
 dr-xr-xr-x  3 root root 512 jan  1  2000 SomeMediaServerDeviceName/
 dr-xr-xr-x  3 root root 512 jan  1  2000 AnotherMediaServerDeviceName/
--r--r--r--  1 root root 114 jan  1  2000 devices
 
 $ cd SomeMediaServerDeviceName
 
@@ -52,7 +52,7 @@ $ xmms Music/Artists/Tinariwen/
 $ fusermount -u /mnt/av
 
 
-Note: the FUSE  kernel module shall be loaded before running djmount 
+Note: the FUSE  kernel module shall be loaded before running avmount 
 (otherwise you will get the error: 
 "fusermount: fuse device not found, try 'modprobe fuse' first").
 
@@ -69,7 +69,6 @@ $ cd /mnt/av
 $ ls -l
 dr-xr-xr-x  3 root root 512 jan  1  2000 SomeMediaServerSupportingSearch/
 dr-xr-xr-x  3 root root 512 jan  1  2000 AnotherMediaServerDeviceName/
--r--r--r--  1 root root 114 jan  1  2000 devices
 
 $ cd SomeMediaServerSupportingSearch
 
@@ -96,14 +95,14 @@ $ fusermount -u /mnt/av
 
 
 Note: full help for searching is available in the "search_help.txt" file,
-included in the djmount package. This file is also available at run-time 
+included in the avmount package. This file is also available at run-time 
 in the "_search" directory, if the connected UPnP device supports searching.
 
 
 Building and Installation
 -------------------------
 
-djmount has been built and tested on various Linux distro (MandrakeLinux 10.1,
+avmount has been built and tested on various Linux distro (MandrakeLinux 10.1,
 GeeXboX, Debian sarge or sid, Ubuntu 5.10, Mandriva 2006.0 ...), which include
 various Linux kernels (e.g. 2.6.14), gcc (e.g. 3.4.1, 4.0.3) and libc
 (e.g. glibc-2.3.5, uClibc 0.9.28).
@@ -114,14 +113,17 @@ A) Basic build instruction:
 
 1) Prerequisites for compilation:
 
-   * the FUSE package : http://fuse.sourceforge.net/ 
+   * the FUSE package (2.9.4) : http://fuse.sourceforge.net/
+   * the Portable SDK for UPnP Devices (2.6.18) : http://pupnp.sourceforge.net/
+   * the cURL package (7.45) : https://curl.haxx.se/
+   * the talloc library (2.1.5) : https://talloc.samba.org/
 
 2) Use 'configure' and 'make' in the top directory to compile.
    Example :
 	./configure
 	make
 
-3) if you want to install djmount on your system, run :
+3) if you want to install avmount on your system, run :
 	make install
 
    or to strip the resulting executable :
@@ -130,17 +132,13 @@ A) Basic build instruction:
 
 B) Advanced build instruction:
 
-"configure" as a few options to customise djmount: see --help option.
+"configure" as a few options to customise avmount: see --help option.
 In particular,
 	
   --disable-debug             extra debugging code [default=enabled]
   --with-fuse-prefix=DIR      search for fuse in DIR/include and DIR/lib
   --with-libiconv-prefix=DIR  search for libiconv in DIR/include and DIR/lib
-  --with-external-talloc      use external talloc library (not recommended)
-                              [default = use internal bundled library]
   --with-talloc-prefix=DIR    search for talloc in DIR/include and DIR/lib
-  --with-external-libupnp     use external libupnp library (at least 1.3.1)
-                              [default = use internal bundled library]
   --with-libupnp-prefix=DIR   search for libupnp in DIR/include and DIR/lib
 
 configure with also checks the following environment variables in
@@ -153,13 +151,6 @@ Examples:
 	./configure --with-external-talloc --with-talloc-prefix=/opt/local
 	TALLOC_CFLAGS='-I/opt/include' ./configure --with-external-talloc
 
-Note: djmount requires the patches included in the bundled libupnp library :
-version 1.2.1a alone is not sufficient. If using an external libupnp 
-installation, it must be version 1.3.1. Version 1.4 (as available from 
-http://www.libupnp.org/ or http://sf.net/projects/pupnp/ ) has *not* 
-been tested with djmount.
-
-
 Usage 
 -----
 
@@ -167,33 +158,33 @@ Usage
 
 	modprobe fuse
 
-2) To run, simply use the 'djmount' executable
+2) To run, simply use the 'avmount' executable
    (no extra file is needed).
    The FUSE mountpoint is a required argument. For example:
 
-	djmount /mnt/upnp
+	avmount /mnt/upnp
 
 3) when finished, unmount the mountpoint (see details in FUSE documentation):
 
 	fusermount -u /mnt/upnp
 
 4) Options :
-   see "djmount --help" for the complete list of options.
+   see "avmount --help" for the complete list of options.
    A useful option is "-o" which can set mount options, in particular:
  
-   "-o iocharset=<charset>" for proper encoding of filenames, in case djmount 
+   "-o iocharset=<charset>" for proper encoding of filenames, in case avmount 
    has not autodetected your settings (which should be the default).
    Example :
-	djmount -o iocharset=iso-8859-15 /mnt/upnp
+	avmount -o iocharset=iso-8859-15 /mnt/upnp
 
    "-o playlists" to render all Audio or Video files as playlists (.m3u or 
    .ram), which contains an URL for the file. In this mode, only the address 
-   of the file is exported through djmount ; the actual content is streamed 
+   of the file is exported through avmount ; the actual content is streamed 
    through HTTP when the playlist is accessed by your favorite media player.
-   This mode was the only mode possible for djmount before version 0.50.
+   This mode was the only mode possible for avmount before version 0.50.
 
    "-o search_history=<size>" to set the maximum number of remembered searches
-   (see "djmount --help" for the default number). Set to 0 to disable searching
+   (see "avmount --help" for the default number). Set to 0 to disable searching
    completely (no "_search" directory will be displayed, even if supported by 
    the connected device).
 
@@ -201,8 +192,8 @@ Usage
 Known Compatible Devices
 ------------------------
 
-djmount has been tested successfully with the following UPnP AV 
-Devices / Media Servers. Although djmount should work with other 
+avmount has been tested successfully with the following UPnP AV 
+Devices / Media Servers. Although avmount should work with other 
 UPnP AV compliant devices, help is needed to test on additional devices.
 
 
@@ -236,24 +227,24 @@ This page describes how to share A/V content with some of the above servers :
 Troubleshooting
 ---------------
 
-* if djmount refuses to start, make sure that the FUSE kernel module has
-  been loaded before running djmount (try 'modprobe fuse' as root).
+* if avmount refuses to start, make sure that the FUSE kernel module has
+  been loaded before running avmount (try 'modprobe fuse' as root).
 
-* if djmount refuses to start, in particular with UPnP error -208 (socket 
-  error), make sure that there is a multicast route set for the default
-  network interface. This should be done automatically on recent distributions,
-  else issue this command (where 'eth0' is the default interface) :
+* if avmount starts but does not detect your devices and logs the following
+  UPnP error -208 (socket error), make sure that there is a multicast route
+  set for the default network interface. This should be done automatically on
+  recent distributions, else issue this command (where 'eth0' is the default interface) :
 	route add -net 239.0.0.0 netmask 255.0.0.0 dev eth0
   or	route add -net 224.0.0.0 netmask 240.0.0.0 dev eth0
 
 * if your UPnP Media Server is behind a closed firewall, it won't be 
-  visible in djmount. Therefore, if there is a firewall on the machine
+  visible in avmount. Therefore, if there is a firewall on the machine
   where you are running your media server, you have to open the necessary
   ports in this firewall. Some media servers can do it automatically 
   (e.g. Windows Media Connect on Windows XP), most of them don't do it 
   (e.g. AV Media Server in Intel Tools).
 
-* in some distributions (e.g. Debian Sarge), djmount (and more generally, 
+* in some distributions (e.g. Debian Sarge), avmount (and more generally, 
   FUSE-based file systems) work fine from the command line, but is unbrowsable
   by Nautilus (Gnome) or Konqueror (KDE) : clicking on a directory causes 
   the new browser window to open momentarily, then immediately close, and 
@@ -269,8 +260,8 @@ Troubleshooting
 
 * for general problems, try also the FUSE documentation http://fuse.sf.net/ .
 
-* finally, if you still have problems, please report on the djmount forums :
-  http://sourceforge.net/forum/?group_id=142039
+* finally, if you still have problems, please report on the avmount issue tracker:
+  https://github.com/fernando-rodriguez/avmount/issues
 
 
 Implementation
@@ -297,7 +288,7 @@ http://www.upnp.org/standardizeddcps/mediaserver.asp
 Copyright and Licenses
 ----------------------
 
-djmount is free software :
+avmount is free software :
 
 
 * "avmount" is (C) Copyright 2005-2006 Rémi Turboult.

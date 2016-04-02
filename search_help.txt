@@ -235,7 +235,7 @@ Notes on these standard classes :
   a music track on an audio CD
 
 - 'container' : a derived class of 'object' used to represent 
-  containers e.g. a music album. In djmount, each container is mapped to a 
+  containers e.g. a music album. In avmount, each container is mapped to a 
   directory.
   
 - 'audioItem' : a piece of content that, when rendered, generates some audio. 

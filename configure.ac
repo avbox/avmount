@@ -1,15 +1,16 @@
 # -*- Autoconf -*-
 # $Id: configure.ac 266 2006-08-27 20:07:58Z r3mi $
 #
-# Top-level configure.ac file for djmount
+# Top-level configure.ac file for avmount
 #
 # Process this file with autoconf to produce a configure script.
 #
+# (C) Copyright 2016 Fernando Rodriguez
 # (C) Copyright 2005 Rémi Turboult <r3mi@users.sourceforge.net>
 #
 
 AC_PREREQ(2.59)
-AC_INIT(djmount, 0.71, r3mi@users.sourceforge.net)
+AC_INIT(avmount, 0.8, https://github.com/fernando-rodriguez/avmount)
 
 AC_CONFIG_MACRO_DIR(m4)
 AC_CONFIG_MACRO_DIR(gl/m4)

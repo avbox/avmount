@@ -1,7 +1,8 @@
 # $Id: Makefile.am 216 2006-07-09 17:32:37Z r3mi $
 #
-# Top-level Makefile.am for djmount
+# Top-level Makefile.am for avmount
 #
+# Copyright (C) 2016 Fernando Rodriguez
 # Copyright (C) 2005 Rémi Turboult <r3mi@users.sourceforge.net>
 #
 
@@ -17,7 +18,7 @@ EXTRA_DIST	= search_help.txt
 # Note : 'libupnp' has a complete autoconf/automake system, which also handles
 # an 'install' target. But we don't want to install libupnp, and we don't want
 # to modify its build system either, so we just forward all 'install*' targets
-# to './djmount' only.
+# to './src' only.
 #
 AUTOMAKE_OPTIONS = -Wno-override
 

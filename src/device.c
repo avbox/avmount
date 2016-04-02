@@ -2,8 +2,9 @@
 /* $Id: device.c 261 2006-08-26 14:17:41Z r3mi $
  *
  * UPnP Device
- * This file is part of djmount.
+ * This file is part of avmount.
  *
+ * (C) Copyright 2016 Fernando Rodriguez
  * (C) Copyright 2005 Rémi Turboult <r3mi@users.sourceforge.net>
  *
  * Part derived from libupnp example (upnp/sample/tvctrlpt/upnp_tv_ctrlpt.c)

@@ -2,8 +2,9 @@
 /* $Id: file_buffer.c 211 2006-06-29 20:02:58Z r3mi $
  *
  * FileBuffer : access to the content of a file (local or remote).
- * This file is part of djmount.
+ * This file is part of avmount.
  *
+ * (C) Copyright 2016 Fernando Rodriguez
  * (C) Copyright 2005 Rémi Turboult <r3mi@users.sourceforge.net>
  *
  * This program is free software; you can redistribute it and/or modify

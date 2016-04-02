@@ -24,7 +24,19 @@ Roadmap
 0.60 (done)
    add search operations
 
-0.80
+0.80 (done)
+   add support for large (>2GB) files
+   add readahead support
+   add multi-home and dynamic network configuration support
+   add ipv6 support (must be enabled on libupnp and libcurl) *UNTESTED*
+   add option to redirect log output to file
+   unbundle libraries
+   fix memory leaks and improve performance
+
+0.81
+   handle duplicate filenames inside a directory
+
+0.90
    add extended attributes
 
 
@@ -49,8 +61,6 @@ To Be Done
 To Be Decided
 =============
 
-- IPV6 support ?
-
 - iTunes support ?
 
 - FreeBSD version using FUSE and libupnp ports ?
@@ -60,11 +70,6 @@ To Be Decided
 - library version (libupnpav) ?
 
 - redirect errors to syslog if daemonized ?
-
-- gnome vfs or KIO native interface ?
-
-- use GLib ?
-
 
 
 
