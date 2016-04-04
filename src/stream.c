@@ -47,6 +47,10 @@
 #include <sys/mman.h>
 #endif
 
+/* Macros for optimizing likely branches */
+#define LIKELY(x)		(__builtin_expect(!!(x), 1))
+#define UNLIKELY(x)		(__builtin_expect(!!(x), 0))
+
 /* cURL file handle */
 struct _Stream
 {
@@ -195,7 +199,7 @@ Stream_WriteCallback(char *buffer, size_t size, size_t nitems, void *userp)
 	assert(file->bufcnt == 0);
 
 	/* get what we need */
-	if (cbdata->rem > 0) {
+	if (LIKELY(cbdata->rem > 0)) {
 		bytes_to_copy = MIN(sz, cbdata->rem);
 		if (cbdata->buf != NULL) {
 			memcpy(cbdata->buf + cbdata->avail, buffer, bytes_to_copy);
@@ -207,13 +211,13 @@ Stream_WriteCallback(char *buffer, size_t size, size_t nitems, void *userp)
 	}
 
 	/* if there's any leftovers save them in buffer */
-	if (sz > 0) {
+	if (LIKELY(sz > 0)) {
 		size_t avail_buf = (file->bufsz - file->bufcnt);
-		if (sz > avail_buf) {
+		if (UNLIKELY(sz > avail_buf)) {
 			char *newbuf;
 			size_t needed_buf = (sz - avail_buf);
 			newbuf = realloc(file->buf, file->bufsz + needed_buf);
-			if (newbuf == NULL) {
+			if (UNLIKELY(newbuf == NULL)) {
 				Log_Printf(LOG_ERROR, "Failed to grow buffer");
 				size -= (sz - avail_buf);
 				sz = avail_buf;
@@ -253,16 +257,16 @@ Stream_FillBuffer(Stream *file, char *buffer, size_t size)
 	curl_easy_setopt(file->handle, CURLOPT_WRITEDATA, &cbdata);
 
 	/* if we got data in the buffer use it first */
-	if (file->bufcnt && cbdata.rem) {
+	if (LIKELY(file->bufcnt && cbdata.rem)) {
 		size_t bytes_to_copy = MIN(file->bufcnt, cbdata.rem);
-		if (cbdata.buf != NULL) {
+		if (LIKELY(cbdata.buf != NULL)) {
 			memcpy(cbdata.buf, file->ptr, bytes_to_copy);
 		}
 		cbdata.avail += bytes_to_copy;
 		cbdata.rem -= bytes_to_copy;
 		file->bufcnt -= bytes_to_copy;
 		file->ptr += bytes_to_copy;
-		if (cbdata.rem == 0) {
+		if (UNLIKELY(cbdata.rem == 0)) {
 			return cbdata.avail;
 		}
 	}
@@ -276,7 +280,7 @@ Stream_FillBuffer(Stream *file, char *buffer, size_t size)
 	 * if the connection has not been established
 	 * then establish it now
 	 */
-	if (!file->connected) {
+	if (UNLIKELY(!file->connected)) {
 #if (ENABLE_READAHEAD == 1)
 		curl_easy_setopt(file->handle, CURLOPT_RESUME_FROM, (long) file->ra_offset);
 #else
@@ -284,7 +288,7 @@ Stream_FillBuffer(Stream *file, char *buffer, size_t size)
 #endif
 		curl_multi_perform(file->multi_handle, &still_running);
 		file->connected = still_running;
-		if (!still_running) {
+		if (UNLIKELY(!still_running)) {
 			if (cbdata.avail == 0) {
 				Log_Printf(LOG_ERROR, "Stream_FillBuffer() -- Http Connection Failed!");
 				curl_multi_remove_handle(file->multi_handle, file->handle);
@@ -322,7 +326,7 @@ Stream_FillBuffer(Stream *file, char *buffer, size_t size)
 
 		/* get file descriptors from the transfers */
 		mc = curl_multi_fdset(file->multi_handle, &fdread, &fdwrite, &fdexcep, &maxfd);
-		if (mc != CURLM_OK) {
+		if (UNLIKELY(mc != CURLM_OK)) {
 			Log_Printf(LOG_ERROR, "curl_multi_fdset() failed, code %d.\n", mc);
 			return -1;
 		}
@@ -334,14 +338,14 @@ Stream_FillBuffer(Stream *file, char *buffer, size_t size)
 			rc = select(maxfd+1, &fdread, &fdwrite, &fdexcep, &timeout);
 		}
 
-		if (rc != -1) {
-			while ((rc = curl_multi_perform(file->multi_handle, &still_running)) ==
-				CURLM_CALL_MULTI_PERFORM);
-			if (rc != CURLM_OK) {
+		if (LIKELY(rc != -1)) {
+			while (UNLIKELY((rc = curl_multi_perform(file->multi_handle,
+				&still_running)) == CURLM_CALL_MULTI_PERFORM));
+			if (UNLIKELY(rc != CURLM_OK)) {
 				Log_Printf(LOG_ERROR, "Stream_FillBuffer() -- "
 					"curl_multi_perform() returned %i", rc);
 			}
-			if (!still_running) {
+			if (UNLIKELY(!still_running)) {
 				CURLMsg *m;
 				int msgcnt;
 				while ((m = curl_multi_info_read(file->multi_handle, &msgcnt)) != NULL) {
@@ -353,7 +357,7 @@ Stream_FillBuffer(Stream *file, char *buffer, size_t size)
 			}
 		}
 	}
-	while (still_running && (cbdata.rem > 0));
+	while (LIKELY(still_running && (cbdata.rem > 0)));
 
 	return (cbdata.avail) ? cbdata.avail : -1;
 }
@@ -377,7 +381,7 @@ Stream_Open(const char *url)
 
 	Log_Printf(LOG_DEBUG, "Stream_Open(%s)", url);
 
-	if ((file = malloc(sizeof(Stream))) == NULL) {
+	if (UNLIKELY((file = malloc(sizeof(Stream))) == NULL)) {
 		Log_Printf(LOG_ERROR, "malloc() failed");
 		return NULL;
 	}
@@ -407,7 +411,7 @@ Stream_Open(const char *url)
 	pthread_cond_init(&file->ra_signal, NULL);
 #endif
 
-	if (file->handle == NULL || file->multi_handle == NULL) {
+	if (UNLIKELY(file->handle == NULL || file->multi_handle == NULL)) {
 		Log_Printf(LOG_ERROR, "curl_easy_init() or curl_multi_init() failed");
 		return NULL;
 	}
@@ -438,16 +442,16 @@ Stream_Seek(Stream *file, off_t offset)
 #endif
 
 #if ENABLE_READAHEAD
-	if (file->ra_running) {
+	if (LIKELY(file->ra_running)) {
 		pthread_mutex_lock(&file->ra_lock);
-		if (file->ra_running) {
+		if (LIKELY(file->ra_running)) {
 			file->ra_abort = 1;
 			file->ra_seekto = offset;
 			pthread_cond_signal(&file->ra_signal);
 			pthread_mutex_unlock(&file->ra_lock);
-			while (file->ra_seekto != -1) {
+			while (UNLIKELY(file->ra_seekto != -1)) {
 				pthread_mutex_lock(&file->ra_lock);
-				if (file->ra_seekto != -1) {
+				if (LIKELY(file->ra_seekto != -1)) {
 					pthread_cond_wait(&file->ra_signal, &file->ra_lock);
 				}
 				pthread_mutex_unlock(&file->ra_lock);
@@ -507,7 +511,7 @@ READAHEAD_START:
 	pthread_cond_signal(&file->ra_signal);
 	pthread_mutex_unlock(&file->ra_lock);
 
-	while (!file->ra_abort) {
+	while (LIKELY(!file->ra_abort)) {
 		size_t chunksz;
 		size_t bytes_read;
 
@@ -521,10 +525,10 @@ READAHEAD_START:
 		CALC_CHUNKSZ();
 
 		/* if no chunk is needed wait until signaled */
-		if (chunksz == 0) {
+		if (UNLIKELY(chunksz == 0)) {
 			pthread_mutex_lock(&file->ra_lock);
 			CALC_CHUNKSZ();
-			if (chunksz == 0) {
+			if (LIKELY(chunksz == 0)) {
 				pthread_cond_wait(&file->ra_signal, &file->ra_lock);
 				pthread_mutex_unlock(&file->ra_lock);
 				continue;
@@ -535,7 +539,7 @@ READAHEAD_START:
 #undef CALC_CHUNKSZ
 
 		/* read the chunk */
-		if ((bytes_read = Stream_FillBuffer(file, ptr, chunksz)) == -1) {
+		if (UNLIKELY((bytes_read = Stream_FillBuffer(file, ptr, chunksz)) == -1)) {
 			Log_Printf(LOG_DEBUG, "Stream_ReadAhead: Stream_FillBuffer returned %zd",
 				bytes_read);
 			switch (file->result) {
@@ -560,8 +564,8 @@ READAHEAD_START:
 			goto THREAD_EXIT;
 		}
 
-		if (bytes_read) {
-			if ((ptr = (ptr + bytes_read)) == file->ra_bufend) {
+		if (LIKELY(bytes_read)) {
+			if (UNLIKELY((ptr = (ptr + bytes_read)) == file->ra_bufend)) {
 				if ((file->ra_bufend < (file->ra_buf + READAHEAD_BUFSZ_MAX)) && file->ra_growbuf) {
 					file->ra_bufend += READAHEAD_BUFSZ_STEP;
 					file->ra_growbuf = 0;
@@ -664,7 +668,7 @@ Stream_Read(Stream *file, void *ptr, size_t size)
 	Log_Printf(LOG_DEBUG, "Stream_Read(%lx, %lx, %zd) - offset=%zd",
 		(unsigned long) file, (unsigned long) ptr, size, file->offset);
 
-	if (size == 0) {
+	if (UNLIKELY(size == 0)) {
 		return 0;
 	}
 #if ENABLE_READAHEAD
@@ -678,7 +682,7 @@ Stream_Read(Stream *file, void *ptr, size_t size)
 	pthread_mutex_unlock(&file->ra_lock);
 
 	/* if there's no worker thread, get it going */
-	if (!file->ra_running && file->ra_avail == 0) {
+	if (UNLIKELY(!file->ra_running && file->ra_avail == 0)) {
 		assert(file->ra_abort == 0);
 		pthread_mutex_lock(&file->ra_lock);
 		if (pthread_create(&file->ra_thread, NULL, Stream_ReadAhead, (void*) file)) {
@@ -689,7 +693,7 @@ Stream_Read(Stream *file, void *ptr, size_t size)
 		pthread_mutex_unlock(&file->ra_lock);
 	}
 
-	while (bytes_read < size) {
+	while (LIKELY(bytes_read < size)) {
 		size_t chunksz;
 
 #define CALC_CHUNKSZ() \
@@ -698,11 +702,11 @@ Stream_Read(Stream *file, void *ptr, size_t size)
 		CALC_CHUNKSZ();
 
 		/* wait until there's data available */
-		if (chunksz == 0) {
+		if (UNLIKELY(chunksz == 0)) {
 			pthread_mutex_lock(&file->ra_lock);
 			CALC_CHUNKSZ();
-			if (chunksz == 0) {
-				if (!file->ra_running) {
+			if (LIKELY(chunksz == 0)) {
+				if (UNLIKELY(!file->ra_running)) {
 					pthread_mutex_unlock(&file->ra_lock);
 					if (bytes_read == 0) {
 						if (file->result == CURLE_OK && !file->eof) {
@@ -720,7 +724,7 @@ Stream_Read(Stream *file, void *ptr, size_t size)
 						return bytes_read;
 					}
 				}
-				if (file->ra_reads > READAHEAD_TRESHOLD) {
+				if (LIKELY(file->ra_reads > READAHEAD_TRESHOLD)) {
 					Log_Printf(LOG_DEBUG, "Stream_Read(%lx): Waiting for data!",
 						(unsigned long) file);
 					if (file->ra_growbuf == 0) {
@@ -751,7 +755,7 @@ Stream_Read(Stream *file, void *ptr, size_t size)
 		memcpy(ptr, file->ra_ptr, chunksz);
 		ptr += chunksz;
 		bytes_read += chunksz;
-		if ((file->ra_ptr = (file->ra_ptr + chunksz)) == file->ra_bufend) {
+		if (UNLIKELY((file->ra_ptr = (file->ra_ptr + chunksz)) == file->ra_bufend)) {
 			file->ra_ptr = file->ra_buf;
 		}
 
