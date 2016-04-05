@@ -698,11 +698,11 @@ ClientManager_RemoveInterface(struct iface_entry *entry)
 	Log_Printf(LOG_INFO, "ClientManager: Removing interface: %s",
 		entry->name);
 
+	pthread_mutex_lock(&entry->mutex);
+
 	if (entry->pid != -1) {
 		command_t cmd = CMD_UPNP_EXIT;
-		pthread_mutex_lock(&entry->mutex);
 		PIPE_WRITE_VALUE(entry->infd, cmd);
-		pthread_mutex_unlock(&entry->mutex);
 		pthread_join(entry->thread, NULL);
 	}
 
@@ -719,6 +719,8 @@ ClientManager_RemoveInterface(struct iface_entry *entry)
 		entry->next->prev = entry->prev;
 	}
 	talloc_free(entry);
+
+	pthread_mutex_unlock(&entry->mutex);
 }
 
 /**
