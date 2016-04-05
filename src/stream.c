@@ -27,14 +27,13 @@
 #include <assert.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <sys/mman.h>
 #include <curl/curl.h>
 #include "log.h"
 #include "minmax.h"
 
 #define MB 			(1024 * 1024)
 #define KB			(1024)
-
-#define ENABLE_READAHEAD 	(1)
 #define READAHEAD_BUFSZ_START 	(64 * KB)
 #define READAHEAD_BUFSZ_STEP	( 2 * MB)
 #define READAHEAD_BUFSZ_MAX	((10 * MB) + READAHEAD_BUFSZ_START)
@@ -43,10 +42,6 @@
 #define READAHEAD_FSEEK_MAX   	(64 * KB)
 #define RETRIES_MAX		(3)
 
-#if ENABLE_READAHEAD
-#include <sys/mman.h>
-#endif
-
 /* Macros for optimizing likely branches */
 #define LIKELY(x)		(__builtin_expect(!!(x), 1))
 #define UNLIKELY(x)		(__builtin_expect(!!(x), 0))
@@ -54,20 +49,22 @@
 /* cURL file handle */
 struct _Stream
 {
-	CURL*  handle;
-	CURLM* multi_handle;
-	CURLcode result;
-	int    connected;
-	int    eof;
+	CURL*           handle;
+	CURLM*          multi_handle;
+	CURLcode        result;
 
-	char*  buf;
-	char*  ptr;
-	size_t bufsz;
-	size_t bufcnt;
-	size_t offset;
-	int retries;
+	int             connected;
+	int             eof;
+	char*           buf;
+	char*           ptr;
+	size_t          bufsz;
+	size_t          bufcnt;
+	size_t          offset;
+	int             retries;
+	struct _Stream* prev;
+	struct _Stream* next;
 
-#if ENABLE_READAHEAD
+	/* readahead stuff */
 	pthread_t       ra_thread;
 	pthread_mutex_t ra_lock;
 	pthread_cond_t  ra_signal;
@@ -82,9 +79,6 @@ struct _Stream
 	int             ra_abort;
 	int             ra_growbuf;
 	const char*     ra_bufend;
-#endif
-	struct _Stream *prev;
-	struct _Stream *next;
 };
 
 typedef struct _Stream Stream;
@@ -155,11 +149,9 @@ Stream_RemoveFromList(Stream *stream)
 static void
 Stream_Free(Stream *file)
 {
-#if ENABLE_READAHEAD == 1
 	if (file->ra_buf != NULL) {
 		munmap(file->ra_buf, READAHEAD_BUFSZ_MAX);
 	}
-#endif
 	if (file->buf) {
 		free(file->buf);
 	}
@@ -281,11 +273,7 @@ Stream_FillBuffer(Stream *file, char *buffer, size_t size)
 	 * then establish it now
 	 */
 	if (UNLIKELY(!file->connected)) {
-#if (ENABLE_READAHEAD == 1)
 		curl_easy_setopt(file->handle, CURLOPT_RESUME_FROM, (long) file->ra_offset);
-#else
-		curl_easy_setopt(file->handle, CURLOPT_RESUME_FROM, (long) file->offset);
-#endif
 		curl_multi_perform(file->multi_handle, &still_running);
 		file->connected = still_running;
 		if (UNLIKELY(!still_running)) {
@@ -399,7 +387,7 @@ Stream_Open(const char *url)
 	file->prev = NULL;
 	file->next = NULL;
 
-#if ENABLE_READAHEAD
+	/* readahead stuff */
 	file->ra_buf = NULL;
 	file->ra_running = 0;
 	file->ra_reads = 0;
@@ -409,7 +397,6 @@ Stream_Open(const char *url)
 	pthread_mutex_init(&file->ra_lock, NULL);
 	pthread_cond_init(&file->ra_signal, NULL);
 	pthread_cond_init(&file->ra_signal, NULL);
-#endif
 
 	if (UNLIKELY(file->handle == NULL || file->multi_handle == NULL)) {
 		Log_Printf(LOG_ERROR, "curl_easy_init() or curl_multi_init() failed");
@@ -436,12 +423,10 @@ Stream_Seek(Stream *file, off_t offset)
 	Log_Printf(LOG_DEBUG, "Stream_Seek(%lx, %zd)",
 		(unsigned long) file, offset);
 
-#if 0
-	Log_Printf(LOG_ERROR, "Stream_Seek: running=%i seekto=%zd abort=%i",
-		file->ra_running, file->ra_seekto, file->ra_abort);
-#endif
-
-#if ENABLE_READAHEAD
+	/*
+	 * if the readahead thread is running send the
+	 * seek request to it
+	 */
 	if (LIKELY(file->ra_running)) {
 		pthread_mutex_lock(&file->ra_lock);
 		if (LIKELY(file->ra_running)) {
@@ -461,7 +446,6 @@ Stream_Seek(Stream *file, off_t offset)
 			pthread_mutex_unlock(&file->ra_lock);
 		}
 	}
-#endif
 
 	curl_multi_remove_handle(file->multi_handle, file->handle);
 	curl_easy_setopt(file->handle, CURLOPT_RESUME_FROM, (long) offset);
@@ -474,7 +458,10 @@ Stream_Seek(Stream *file, off_t offset)
 	file->ra_offset = offset;
 }
 
-#if ENABLE_READAHEAD
+/**
+ * Stream_ReadAhead() -- Reads and buffers stream in
+ * background thread.
+ */
 static void*
 Stream_ReadAhead(void *f)
 {
@@ -657,7 +644,6 @@ THREAD_EXIT:
 	return NULL;
 }
 #undef READAHEAD_INIT
-#endif
 
 /**
  * Stream_Read()
@@ -665,15 +651,14 @@ THREAD_EXIT:
 ssize_t
 Stream_Read(Stream *file, void *ptr, size_t size)
 {
+	size_t bytes_read = 0;
+
 	Log_Printf(LOG_DEBUG, "Stream_Read(%lx, %lx, %zd) - offset=%zd",
 		(unsigned long) file, (unsigned long) ptr, size, file->offset);
 
 	if (UNLIKELY(size == 0)) {
 		return 0;
 	}
-#if ENABLE_READAHEAD
-
-	size_t bytes_read = 0;
 
 	/* signal worker that we want data */
 	pthread_mutex_lock(&file->ra_lock);
@@ -776,16 +761,6 @@ Stream_Read(Stream *file, void *ptr, size_t size)
 	file->offset += bytes_read;
 	file->ra_reads++;
 	return bytes_read;
-#else
-	size_t bytes_read;
-	if ((bytes_read = Stream_FillBuffer(file, ptr, size)) == -1) {
-		return -1;
-	}
-	if (bytes_read < size) {
-		Log_Printf(LOG_ERROR, "Requested %zd but got %zd", size, bytes_read);
-	}
-	return bytes_read;
-#endif
 }
 
 /**
@@ -796,8 +771,6 @@ Stream_Close(Stream *file)
 {
 	Log_Printf(LOG_DEBUG, "Stream_Close(%lx)", (unsigned long) file);
 	Log_Printf(LOG_DEBUG, "Stream: Buffer size: %zd", file->bufsz);
-
-#if ENABLE_READAHEAD
 	Log_Printf(LOG_DEBUG, "Stream: Readahead buffer size: %zd",
 		(file->ra_bufend - file->ra_buf));
 
@@ -809,7 +782,7 @@ Stream_Close(Stream *file)
 		pthread_join(file->ra_thread, NULL);
 		assert(file->ra_abort == 0);
 	}
-#endif
+
 	Stream_RemoveFromList(file);
 	Stream_Free(file);
 }
