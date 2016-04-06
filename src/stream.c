@@ -19,6 +19,10 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
+#ifdef HAVE_CONFIG_H
+#	include <config.h>
+#endif
+
 #include <stdio.h>
 #include <string.h>
 #include <sys/time.h>
@@ -29,6 +33,7 @@
 #include <pthread.h>
 #include <sys/mman.h>
 #include <curl/curl.h>
+#include <talloc.h>
 #include "log.h"
 #include "minmax.h"
 
@@ -93,6 +98,8 @@ StreamList;
 static pthread_mutex_t streams_lock = PTHREAD_MUTEX_INITIALIZER;
 static StreamList streams = { NULL, NULL };
 
+static void *context = NULL;
+
 /* curl callback structure */
 struct _Stream_CallbackData
 {
@@ -101,6 +108,59 @@ struct _Stream_CallbackData
 	size_t rem;
 	Stream *file;
 };
+
+/*
+ * cURL memory allocation functions
+ */
+static void*
+curl_malloc_func(size_t size)
+{
+	void *ret = talloc_size(context, size);
+#ifdef DEBUG
+	if (ret != NULL) {
+		talloc_set_name(ret, "libcurl");
+	}
+#endif
+	return ret;
+}
+static void
+curl_free_func(void *ptr)
+{
+	talloc_free(ptr);
+}
+static void*
+curl_realloc_func(void *ptr, size_t size)
+{
+	void *ret = talloc_realloc_size(context, ptr, size);
+#ifdef DEBUG
+	if (ret != NULL) {
+		talloc_set_name(ret, "libcurl");
+	}
+#endif
+	return ret;
+}
+static char*
+curl_strdup_func(const char *str)
+{
+	void *ret = talloc_strdup(context, str);
+#ifdef DEBUG
+	if (ret != NULL) {
+		talloc_set_name(ret, "libcurl");
+	}
+#endif
+	return ret;
+}
+static void*
+curl_calloc_func(size_t nmemb, size_t size)
+{
+	void *ret = talloc_zero_size(context, nmemb * size);
+#ifdef DEBUG
+	if (ret != NULL) {
+		talloc_set_name(ret, "libcurl");
+	}
+#endif
+	return ret;
+}
 
 /**
  * Stream_AddToList() -- Add stream to list.
@@ -152,13 +212,10 @@ Stream_Free(Stream *file)
 	if (file->ra_buf != NULL) {
 		munmap(file->ra_buf, READAHEAD_BUFSZ_MAX);
 	}
-	if (file->buf) {
-		free(file->buf);
-	}
 	curl_multi_remove_handle(file->multi_handle, file->handle);
 	curl_easy_cleanup(file->handle);
 	curl_multi_cleanup(file->multi_handle);
-	free(file);
+	talloc_free(file);
 }
 
 /**
@@ -175,6 +232,8 @@ Stream_Destroy()
 		Stream_Free(file);
 		file = next;
 	}
+
+	curl_global_cleanup();
 }
 
 /**
@@ -208,12 +267,15 @@ Stream_WriteCallback(char *buffer, size_t size, size_t nitems, void *userp)
 		if (UNLIKELY(sz > avail_buf)) {
 			char *newbuf;
 			size_t needed_buf = (sz - avail_buf);
-			newbuf = realloc(file->buf, file->bufsz + needed_buf);
+			newbuf = talloc_realloc_size(file, file->buf, file->bufsz + needed_buf);
 			if (UNLIKELY(newbuf == NULL)) {
 				Log_Printf(LOG_ERROR, "Failed to grow buffer");
 				size -= (sz - avail_buf);
 				sz = avail_buf;
 			} else {
+#ifdef DEBUG
+				talloc_set_name(newbuf, "Buffer");
+#endif
 				if (file->buf == NULL) {
 					file->ptr = newbuf;
 				} else {
@@ -356,7 +418,17 @@ Stream_FillBuffer(Stream *file, char *buffer, size_t size)
 void
 Stream_Init()
 {
-	curl_global_init(CURL_GLOBAL_DEFAULT);
+	context = talloc_named(NULL, 0, "Streamer");
+	if (context == NULL) {
+		Log_Print(LOG_ERROR, "Stream_Init() -- Out of memory");
+		exit(1);
+	}
+	curl_global_init_mem(CURL_GLOBAL_DEFAULT,
+		curl_malloc_func,
+		curl_free_func,
+		curl_realloc_func,
+		curl_strdup_func,
+		curl_calloc_func);
 }
 
 /**
@@ -369,31 +441,19 @@ Stream_Open(const char *url)
 
 	Log_Printf(LOG_DEBUG, "Stream_Open(%s)", url);
 
-	if (UNLIKELY((file = malloc(sizeof(Stream))) == NULL)) {
-		Log_Printf(LOG_ERROR, "malloc() failed");
+	if (UNLIKELY((file = talloc_zero(context, Stream)) == NULL)) {
+		Log_Printf(LOG_ERROR, "Stream_Open(): Out of memory");
 		return NULL;
 	}
 
+#ifdef DEBUG
+	talloc_set_name(file, "Stream:%s", url);
+#endif
+
+	assert(CURLE_OK == 0);
 	file->handle = curl_easy_init();
 	file->multi_handle = curl_multi_init();
-	file->buf = NULL;
-	file->bufcnt = 0;
-	file->bufsz = 0;
-	file->connected = 0;
-	file->eof = 0;
-	file->offset = 0;
-	file->result = CURLE_OK;
-	file->retries = 0;
-	file->prev = NULL;
-	file->next = NULL;
 
-	/* readahead stuff */
-	file->ra_buf = NULL;
-	file->ra_running = 0;
-	file->ra_reads = 0;
-	file->ra_abort = 0;
-	file->ra_avail = 0;
-	file->ra_offset = 0;
 	pthread_mutex_init(&file->ra_lock, NULL);
 	pthread_cond_init(&file->ra_signal, NULL);
 	pthread_cond_init(&file->ra_signal, NULL);
