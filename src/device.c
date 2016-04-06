@@ -322,6 +322,35 @@ Device_Create (void* parent_context,
 
 
 /*****************************************************************************
+ * Device_GC -- Garbage collector
+ *****************************************************************************/
+void
+Device_GC(const Device *dev)
+{
+	if (dev == NULL) {
+		return;
+	}
+
+	Log_Printf(LOG_DEBUG, "Device_GC() -- Collecting cache for %s",
+		dev->friendlyName);
+
+	ListNode* node;
+	LinkedList* const services = discard_const_p(LinkedList, &dev->services);
+	if (services != NULL) {
+		for (node = ListHead(services);
+			node != NULL; node = ListNext(services, node)) {
+			const char *serviceType = Service_GetServiceType(node->item);
+			if (serviceType != NULL) {
+				if (!strcmp(serviceType, CONTENT_DIR_SERVICE_TYPE)) {
+					ContentDir_GC(node->item);
+				}
+			}
+		}
+	}
+}
+
+
+/*****************************************************************************
  * Device_GetDescDocItem
  *****************************************************************************/
 const char*

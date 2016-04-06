@@ -48,6 +48,9 @@
 #include <upnp/upnptools.h>
 #include <upnp/LinkedList.h>
 
+#ifdef HAVE_MALLOC_TRIM
+#	include <malloc.h>
+#endif
 
 // How often to check advertisement and subscription timeouts for devices
 static const unsigned int CHECK_SUBSCRIPTIONS_TIMEOUT = 30; // in seconds
@@ -839,7 +842,7 @@ DeviceList_GetDeviceStatusString (void* context, const char* deviceName,
 
 
 /*****************************************************************************
- * VerifyTimeouts
+ * DeviceList_VerifyTimeouts
  *
  * Description: 
  *       Checks the advertisement  each device
@@ -853,7 +856,7 @@ DeviceList_GetDeviceStatusString (void* context, const char* deviceName,
  *
  *****************************************************************************/
 static void
-VerifyTimeouts (int incr)
+DeviceList_VerifyTimeouts (int incr)
 {
   ithread_mutex_lock (&DeviceListMutex);
   
@@ -886,7 +889,7 @@ VerifyTimeouts (int incr)
 				 * and update it if it has?
 				 */
         free(descDocText);
-				devnode->expires = 60;
+        devnode->expires = 60;
       }
     }
   }
@@ -894,26 +897,51 @@ VerifyTimeouts (int incr)
 }
 
 
+/**
+ * DeviceList_GC() -- Garbage Collect Caches
+ */
+static void
+DeviceList_GC()
+{
+	ithread_mutex_lock (&DeviceListMutex);
+	ListNode* node;
+	for (node = ListHead (&GlobalDeviceList);
+		node != 0; node = ListNext(&GlobalDeviceList, node)) {
+		DeviceNode *devnode = node->item;
+		Device_GC(devnode->d);
+	}
+#ifdef HAVE_MALLOC_TRIM
+	malloc_trim(4096);
+#endif
+	ithread_mutex_unlock (&DeviceListMutex);
+}
+
+
 /*****************************************************************************
- * CheckSubscriptionsLoop
+ * DeviceList_BackgroundWorker()
  *
  * Description: 
- *       Function that runs in its own thread and monitors advertisement
- *       and subscription timeouts for devices in the global device list.
+ *       Function that runs in its own thread and performs the following
+ *       background tasks:
+ *
+ *       - Monitor subscription timeouts for devices in the global device list
+ *       - Periodically garbage collect caches
  *
  * Parameters:
  *    None
  *
  *****************************************************************************/
 static void*
-CheckSubscriptionsLoop (void* arg)
+DeviceList_BackgroundWorker(void* arg)
 {
 	while (true) {
-		isleep (CHECK_SUBSCRIPTIONS_TIMEOUT);
-		VerifyTimeouts (CHECK_SUBSCRIPTIONS_TIMEOUT);
+		isleep(CHECK_SUBSCRIPTIONS_TIMEOUT);
+		DeviceList_VerifyTimeouts(CHECK_SUBSCRIPTIONS_TIMEOUT);
+		DeviceList_GC();
 	}
 	return NULL;
 }
+
 
 /*****************************************************************************
  * DeviceList_Init
@@ -931,7 +959,7 @@ DeviceList_Init()
 	//DeviceList_RefreshAll (true);
 
 	// start a timer thread
-	ithread_create (&g_timer_thread, NULL, CheckSubscriptionsLoop, NULL);
+	ithread_create (&g_timer_thread, NULL, DeviceList_BackgroundWorker, NULL);
 
 	return 0;
 }

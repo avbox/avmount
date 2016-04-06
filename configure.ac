@@ -260,6 +260,9 @@ AX_LIB_CURL([7.45.0],,
 LDFLAGS="$LDFLAGS -lcurl"
 AC_DEFINE([USE_CURL], 1, [Define to 1 to use libcurl])
 
+AC_CHECK_FUNCS([malloc_trim])
+
+
 #
 # Output Makefiles
 #

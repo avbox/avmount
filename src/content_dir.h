@@ -127,6 +127,13 @@ ContentDir_Create (void* context,
 
 
 /*****************************************************************************
+ * @brief Garbage collect ContentDir cache.
+ *****************************************************************************/
+void
+ContentDir_GC(const ContentDir *cds);
+
+
+/*****************************************************************************
  * Content Directory Service Actions
  * The following methods define the various ContentDirectory actions :
  * see UPnP documentation : ContentDirectory:1 Service Template Version 1.01

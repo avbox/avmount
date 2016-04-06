@@ -68,6 +68,13 @@ Cache_Create (void* context, size_t size, time_t max_age,
 
 
 /******************************************************************************
+ * @brief	Garbage collect cache
+ *****************************************************************************/
+void
+Cache_GC(Cache *cache);
+
+
+/******************************************************************************
  * @brief	Returns a pointer to the data for an entry,
  *		creating the entry if not already in the cache.
  *		

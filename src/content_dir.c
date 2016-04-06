@@ -616,3 +616,14 @@ error:
 	return NULL;
 }
 
+/*****************************************************************************
+ * ContentDir_GC
+ *****************************************************************************/
+void
+ContentDir_GC(const ContentDir *cds)
+{
+	if (cds != NULL && cds->cache != NULL) {
+		Cache_GC(cds->cache);
+	}
+}
+

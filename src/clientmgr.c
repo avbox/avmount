@@ -37,6 +37,10 @@
 #include <pthread.h>
 #include <upnp/upnp.h>
 
+#ifdef HAVE_MALLOC_TRIM
+#include <malloc.h>
+#endif
+
 #include "log.h"
 #include "device_list.h"
 #include "content_dir.h"
@@ -567,6 +571,13 @@ ClientManager_ProxyThread(void *data)
 		 */
 		Stream_Destroy();
 		DeviceList_Destroy();
+
+		/*
+		 * If malloc_trim() is available then trim the heap
+		 */
+#ifdef HAVE_MALLOC_TRIM
+		malloc_trim(0);
+#endif
 
 		/* run the client */
 		ClientManager_ClientLoop(iface, eventsfd[1], writefd[0], readfd[1]);
