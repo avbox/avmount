@@ -195,7 +195,7 @@ Device_Create (void* parent_context,
 	       const char* const descDocURL, 
 	       const char* const deviceId,
 	       const char* const descDocText,
-				 const char* const iface)
+	       const char* const iface)
 {
 	if (descDocURL == NULL || *descDocURL == NUL) {
 		Log_Printf (LOG_ERROR, 
@@ -254,6 +254,16 @@ Device_Create (void* parent_context,
 		.iface         = talloc_strdup (dev, iface),
 		// Other fields to empty values
 	};
+
+	if (dev->descDocURL == NULL || dev->descDocText == NULL || dev->iface == NULL) {
+		Log_Print(LOG_ERROR, "Device_Create: Out of memory");
+		talloc_free(dev);
+		return NULL;
+	}
+
+#ifdef DEBUG
+	talloc_set_name(dev->descDocText, "DescDocText");
+#endif
 
 	const char* const baseURL = XMLUtil_FindFirstElementValue
 		(XML_D2N(dev->descDoc), "URLBase", true, false);

@@ -288,6 +288,14 @@ VFS_Browse (VFS* const self, const VFS_Query* q)
 	
 	// Create a working context for temporary memory allocations
 	void* tmp_ctx = talloc_new (NULL);
+	if (tmp_ctx == NULL) {
+		Log_Print(LOG_ERROR, "VFS_Browse: Out of memory");
+		return -ENOMEM;
+	}
+
+#ifdef DEBUG
+	talloc_set_name(tmp_ctx, "VFS_Browse");
+#endif
 	
 	BROWSE_BEGIN(q->path, q) {
 		_DIR_BEGIN("", true) {

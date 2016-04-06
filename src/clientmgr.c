@@ -662,6 +662,10 @@ ClientManager_AddInterface(char *name)
 		return -1;
 	}
 
+#ifdef DEBUG
+	talloc_set_name(iface, "NetworkInterface: %s", name);
+#endif
+
 	iface->name = talloc_strdup(iface, name);
 	iface->keep = 1;
 	iface->prev = NULL;
@@ -896,6 +900,9 @@ ClientManager_Start()
 		Log_Printf(LOG_ERROR, "ClientManager: talloc_new() failed!");
 		return;
 	}
+#ifdef DEBUG
+	talloc_set_name(context, "ClientManager");
+#endif
 
 	abort_mon = 0;
 
