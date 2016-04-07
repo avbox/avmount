@@ -47,6 +47,7 @@
 #include "xml_util.h"
 #include "talloc_util.h"
 #include "stream.h"
+#include "fuse_fs.h"
 
 /*
  * Structure used to represent a network interface
@@ -571,6 +572,7 @@ ClientManager_ProxyThread(void *data)
 		 */
 		Stream_Destroy();
 		DeviceList_Destroy();
+		FuseFS_Destroy(0);
 
 		/*
 		 * If malloc_trim() is available then trim the heap

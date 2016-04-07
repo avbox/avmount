@@ -79,7 +79,7 @@ BUILT_SOURCES		= search_help.h
 search_help.h : ../search_help.txt txt2h.pl
 	$(PERL) $(srcdir)/txt2h.pl $< > $@
 
-avmount_SOURCES		= $(COMMON_SRCS) fuse_main.c
+avmount_SOURCES		= $(COMMON_SRCS) fuse_fs.c main.c
 
 test_upnp_SOURCES	= $(COMMON_SRCS) test_upnp.c
 test_upnp_LDADD		= $(LDADD) $(READLINE_LIBS)
