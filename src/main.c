@@ -396,6 +396,7 @@ main (int argc, char *argv[])
 	 */
 	Log_Print(LOG_DEBUG, "Shutting down ...");
 	FuseFS_Destroy(1);
+	Stream_Destroy();
 	ClientManager_Stop();
 	Charset_Finish();
 	Log_Finish();

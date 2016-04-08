@@ -24,7 +24,9 @@
 #ifndef XML_UTIL_H_INCLUDED
 #define XML_UTIL_H_INCLUDED
 
-#include <config.h>
+#ifdef HAVE_CONFIG_H
+#	include <config.h>
+#endif
 
 #include <stdbool.h>
 #include <inttypes.h>

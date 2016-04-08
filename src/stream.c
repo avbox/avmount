@@ -208,6 +208,7 @@ Stream_Destroy()
 	});
 
 	curl_global_cleanup();
+	talloc_free(context);
 }
 
 /**

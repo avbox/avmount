@@ -318,19 +318,20 @@ ClientManager_ClientLoop(struct iface_entry *iface, int eventsfd, int infd, int 
 
 	iface->eventsfd = eventsfd;
 
-	Log_Printf (LOG_INFO, "Intializing UPnP client on interface %s",
-		iface->name);
+	Log_Printf (LOG_INFO, "Client[%i]: Intializing UPnP client on interface %s",
+		getpid(), iface->name);
 
 	/* Initialize libupnp */
 	rc = UpnpInit2(iface->name, 0);
 	if (UPNP_E_SUCCESS != rc) {
-		Log_Printf (LOG_ERROR, "UpnpInit2() Error: %d", rc);
+		Log_Printf(LOG_ERROR, "Client[%i]: UpnpInit2() Error: %d",
+			getpid(), rc);
 		UpnpFinish();
 		if (rc == UPNP_E_SOCKET_ERROR) {
-			Log_Printf (LOG_ERROR, "Check network configuration, "
+			Log_Printf(LOG_ERROR, "Client[%i]: Check network configuration, "
 				"in particular that a multicast route "
 				"is set for the default network "
-				"interface");
+				"interface", getpid());
 		}
 		exit(1);
 	}
@@ -339,12 +340,13 @@ ClientManager_ClientLoop(struct iface_entry *iface, int eventsfd, int infd, int 
 	rc = UpnpRegisterClient(EventHandlerCallback,
 		iface, &iface->handle);
 	if (rc != UPNP_E_SUCCESS) {
-		Log_Printf (LOG_ERROR, "Error registering CP: %d", rc);
+		Log_Printf(LOG_ERROR, "Client[%i]: Error registering CP: %d",
+			getpid(), rc);
 		UpnpFinish();
 		exit(1);
 	}
 
-	Log_Printf(LOG_INFO, "UPnP Initialized (pid=%i if=%s ip=%s port=%d handle=%lx)",
+	Log_Printf(LOG_INFO, "Client[%i]: UPnP Initialized (if=%s ip=%s port=%d handle=%lx)",
 		getpid(), iface->name, UpnpGetServerIpAddress(), UpnpGetServerPort(),
 		(unsigned long) iface->handle);
 
@@ -421,12 +423,12 @@ ClientManager_ClientLoop(struct iface_entry *iface, int eventsfd, int infd, int 
 			}
 			case CMD_UPNP_EXIT:
 			{
-				Log_Printf(LOG_DEBUG, "Client(%i): Exit command received",
+				Log_Printf(LOG_DEBUG, "Client[%i]: Exit command received",
 					getpid());
 				goto CLIENT_EXIT;
 			}
 			default:
-				Log_Printf(LOG_ERROR, "Client(%i): Unknown command received %i",
+				Log_Printf(LOG_ERROR, "Client[%i]: Unknown command received %i",
 					getpid(), cmd);
 				abort();
 			}
@@ -435,7 +437,7 @@ ClientManager_ClientLoop(struct iface_entry *iface, int eventsfd, int infd, int 
 			if (errno == EINTR) {
 				continue;
 			}
-			Log_Printf(LOG_ERROR, "Client(%i): read returned %zd (errno=%i)",
+			Log_Printf(LOG_ERROR, "Client[%i]: read returned %zd (errno=%i)",
 				getpid(), ret, errno);
 			abort();
 		}
