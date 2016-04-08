@@ -69,6 +69,7 @@ struct _Stream
 	size_t          bufcnt;
 	size_t          offset;
 	int             retries;
+	pthread_mutex_t read_lock;
 
 	/* readahead stuff */
 	pthread_t       ra_thread;
@@ -431,6 +432,7 @@ Stream_Open(const char *url)
 	file->handle = curl_easy_init();
 	file->multi_handle = curl_multi_init();
 
+	pthread_mutex_init(&file->read_lock, NULL);
 	pthread_mutex_init(&file->ra_lock, NULL);
 	pthread_cond_init(&file->ra_signal, NULL);
 	pthread_cond_init(&file->ra_signal, NULL);
@@ -688,13 +690,15 @@ THREAD_EXIT:
 ssize_t
 Stream_Read(Stream *file, void *ptr, size_t size)
 {
-	size_t bytes_read = 0;
+	ssize_t bytes_read = 0;
+
+	pthread_mutex_lock(&file->read_lock);
 
 	Log_Printf(LOG_DEBUG, "Stream_Read(%lx, %lx, %zd) - offset=%zd",
 		(unsigned long) file, (unsigned long) ptr, size, file->offset);
 
 	if (UNLIKELY(size == 0)) {
-		return 0;
+		goto STREAM_READ_EXIT;
 	}
 
 	/* signal worker that we want data */
@@ -709,7 +713,8 @@ Stream_Read(Stream *file, void *ptr, size_t size)
 		pthread_mutex_lock(&file->ra_lock);
 		if (pthread_create(&file->ra_thread, NULL, Stream_ReadAhead, (void*) file)) {
 			Log_Printf(LOG_ERROR, "Stream_Read() -- pthread_create() failed!");
-			return -1;
+			bytes_read = -1;
+			goto STREAM_READ_EXIT;
 		}
 		pthread_cond_wait(&file->ra_signal, &file->ra_lock);
 		pthread_mutex_unlock(&file->ra_lock);
@@ -734,16 +739,18 @@ Stream_Read(Stream *file, void *ptr, size_t size)
 						if (file->result == CURLE_OK && !file->eof) {
 							Log_Printf(LOG_DEBUG, "Stream_Read: Returning 0 (eof)");
 							file->eof = 1;
-							return 0;
+							bytes_read = 0;
+							goto STREAM_READ_EXIT;
 						}
 						Log_Printf(LOG_ERROR, "Stream: Read failed! (result=%i retries=%i)",
 							file->result, file->retries);
-						return -1;
+						bytes_read = -1;
+						goto STREAM_READ_EXIT;
 					} else {
 						Log_Printf(LOG_DEBUG, "Stream: Requested %zd but got %zd",
 							size, bytes_read);
 						file->offset += bytes_read;
-						return bytes_read;
+						goto STREAM_READ_EXIT;
 					}
 				}
 				if (LIKELY(file->ra_reads > READAHEAD_TRESHOLD)) {
@@ -797,6 +804,9 @@ Stream_Read(Stream *file, void *ptr, size_t size)
 	}
 	file->offset += bytes_read;
 	file->ra_reads++;
+
+STREAM_READ_EXIT:
+	pthread_mutex_unlock(&file->read_lock);
 	return bytes_read;
 }
 
