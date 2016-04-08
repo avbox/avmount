@@ -36,6 +36,7 @@
 #include <talloc.h>
 #include "log.h"
 #include "minmax.h"
+#include "linkedlist.h"
 
 #define MB 			(1024 * 1024)
 #define KB			(1024)
@@ -54,6 +55,8 @@
 /* cURL file handle */
 struct _Stream
 {
+	LIST_HEAD();
+
 	CURL*           handle;
 	CURLM*          multi_handle;
 	CURLcode        result;
@@ -66,8 +69,6 @@ struct _Stream
 	size_t          bufcnt;
 	size_t          offset;
 	int             retries;
-	struct _Stream* prev;
-	struct _Stream* next;
 
 	/* readahead stuff */
 	pthread_t       ra_thread;
@@ -88,15 +89,8 @@ struct _Stream
 
 typedef struct _Stream Stream;
 
-typedef struct
-{
-	Stream *first;
-	Stream *last;
-}
-StreamList;
-
 static pthread_mutex_t streams_lock = PTHREAD_MUTEX_INITIALIZER;
-static StreamList streams = { NULL, NULL };
+LIST_DECLARE_STATIC(streams);
 
 static void *context = NULL;
 
@@ -169,14 +163,7 @@ static void
 Stream_AddToList(Stream *stream)
 {
 	pthread_mutex_lock(&streams_lock);
-	if (streams.first == NULL || streams.last == NULL) {
-		assert(streams.first == streams.last);
-		streams.first = streams.last = stream;
-	} else {
-		stream->prev = streams.last;
-		streams.last->next = stream;
-		streams.last = stream;
-	}
+	LIST_ADD(&streams, stream);
 	pthread_mutex_unlock(&streams_lock);
 }
 
@@ -187,18 +174,7 @@ static void
 Stream_RemoveFromList(Stream *stream)
 {
 	pthread_mutex_lock(&streams_lock);
-	if (stream->prev == NULL) {
-		assert(streams.first == stream);
-		streams.first = stream->next;
-	} else {
-		stream->prev->next = stream->next;
-	}
-	if (stream->next == NULL) {
-		assert(streams.last == stream);
-		streams.last = stream->prev;
-	} else {
-		stream->next->prev = stream->prev;
-	}
+	LIST_REMOVE(stream);
 	pthread_mutex_unlock(&streams_lock);
 }
 
@@ -225,13 +201,11 @@ Stream_Free(Stream *file)
 void
 Stream_Destroy()
 {
-	Stream *file = streams.first;
-	while (file != NULL) {
-		Stream *next = file->next;
-		Stream_RemoveFromList(file);
-		Stream_Free(file);
-		file = next;
-	}
+	Stream *stream;
+	LIST_FOREACH_SAFE(Stream*, stream, &streams, {
+		Stream_RemoveFromList(stream);
+		Stream_Free(stream);
+	});
 
 	curl_global_cleanup();
 }
@@ -418,6 +392,8 @@ Stream_FillBuffer(Stream *file, char *buffer, size_t size)
 void
 Stream_Init()
 {
+	LIST_INIT(&streams);
+
 	context = talloc_named(NULL, 0, "Streamer");
 	if (context == NULL) {
 		Log_Print(LOG_ERROR, "Stream_Init() -- Out of memory");

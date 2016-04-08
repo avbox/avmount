@@ -35,11 +35,12 @@
 #include "xml_util.h"
 #include "log.h"
 #include "talloc_util.h"
+#include "linkedlist.h"
 
 #include <time.h>
 #include <stdbool.h>
+#include <assert.h>
 #include <upnp/upnp.h>
-#include <upnp/LinkedList.h>
 
 
 
@@ -65,8 +66,14 @@ struct _Device {
 	const char*	friendlyName; 	// <friendlyName>
 	const char*	presURL;	// <presentationURL> resolved with base
 	
-	LinkedList	services; 	// Linked list of Service*
+	LIST_DECLARE(services);
 };
+
+typedef struct _ServiceNode {
+	LIST_DECLARE(head);
+	void *item;
+}
+ServiceNode;
 
 
 
@@ -163,13 +170,6 @@ static int
 destroy (Device* const dev)
 {
 	if (dev) {
-		/* Delete list.
-		 * Note that items are not destroyed : Service* are 
-		 * automatically deallocated by "talloc" when parent Device 
-		 * is detroyed.
-		 */
-		ListDestroy (&dev->services, /*freeItem=>*/ 0); 
-
 		// Delete description document
 		if (dev->descDoc) {
 			ixmlDocument_free (dev->descDoc);
@@ -292,7 +292,7 @@ Device_Create (void* parent_context,
 	/*
 	 * Find and parse services
 	 */
-	ListInit (&dev->services, NULL, NULL);
+	LIST_INIT(&dev->services);
 	
 	IXML_Element* const serviceList = XMLUtil_FindFirstElement
 		(dev->descDocNode, "serviceList", false, false);
@@ -305,8 +305,16 @@ Device_Create (void* parent_context,
 		Service* const serv = ServiceFactory (dev, ctrlpt_handle, 
 						      serviceDesc, 
 						      dev->baseURL);
-		if (serv)
-			ListAddTail (&dev->services, serv);
+		if (serv) {
+			ServiceNode* node = talloc(serv, ServiceNode);
+			if (node == NULL) {
+				Log_Print(LOG_ERROR, "Device_Create() - Out of memory");
+				talloc_free(dev);
+				return NULL;
+			}
+			node->item = serv;
+			LIST_ADD(&dev->services, node);
+		}
 	}
 	
 	if (serviceList) {
@@ -334,16 +342,12 @@ Device_GC(const Device *dev)
 	Log_Printf(LOG_DEBUG, "Device_GC() -- Collecting cache for %s",
 		dev->friendlyName);
 
-	ListNode* node;
-	LinkedList* const services = discard_const_p(LinkedList, &dev->services);
-	if (services != NULL) {
-		for (node = ListHead(services);
-			node != NULL; node = ListNext(services, node)) {
-			const char *serviceType = Service_GetServiceType(node->item);
-			if (serviceType != NULL) {
-				if (!strcmp(serviceType, CONTENT_DIR_SERVICE_TYPE)) {
-					ContentDir_GC(node->item);
-				}
+	ServiceNode *node;
+	LIST_FOREACH(ServiceNode*, node, &dev->services) {
+		const char *serviceType = Service_GetServiceType(node->item);
+		if (serviceType != NULL) {
+			if (!strcmp(serviceType, CONTENT_DIR_SERVICE_TYPE)) {
+				ContentDir_GC(node->item);
 			}
 		}
 	}
@@ -388,12 +392,8 @@ Device_SusbcribeAllEvents (const char* iface, const Device* dev)
 		    NN(dev->friendlyName));
 
 	int rc = UPNP_E_SUCCESS;
-	ListNode* node;
-	LinkedList* const services = discard_const_p (LinkedList, 
-						      &dev->services);
-	for (node = ListHead (services);
-	     node != NULL;
-	     node = ListNext (services, node)) {
+	ServiceNode* node;
+	LIST_FOREACH(ServiceNode*, node, &dev->services) {
 		int rc2 = Service_SubscribeEventURL (iface, node->item); 
 		if (rc2 != UPNP_E_SUCCESS)
 			rc = rc2;
@@ -412,12 +412,8 @@ Device_GetServiceFrom (const Device* dev,
 		       bool log_error)
 {  
 	if (servname) {
-		ListNode* node;
-		LinkedList* const services = discard_const_p (LinkedList, 
-							      &dev->services);
-		for (node = ListHead (services);
-		     node != NULL;
-		     node = ListNext (services, node)) {
+		ServiceNode* node;
+		LIST_FOREACH(ServiceNode*, node, &dev->services) {
 			const char* s = NULL;
 			switch (from) {
 			case FROM_SID:		
@@ -472,15 +468,11 @@ Device_GetStatusString (const Device* dev, void* result_context, bool debug)
 		     (long) talloc_total_size (dev));
 	}
 	
-	ListNode* node;
-	LinkedList* const services = discard_const_p (LinkedList, 
-						      &dev->services);
-	for (node = ListHead (services);
-	     node != NULL;
-	     node = ListNext (services, node)) {
+	ServiceNode* node;
+	LIST_FOREACH(ServiceNode*, node, &dev->services) {
 		const Service* const serv = node->item;
-		bool const last = (node == ListTail (services));
-		
+		bool const last = (node == LIST_TAIL(ServiceNode*, &dev->services));
+
 		tpr (&p, "  | \n");
 		if (serv == NULL) {
 			tpr (&p, "  +- **ERROR** NULL Service\n");

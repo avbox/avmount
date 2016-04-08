@@ -28,8 +28,7 @@
 
 #include "service.h"
 #include "object_p.h"
-
-#include <upnp/LinkedList.h>
+#include "linkedlist.h"
 
 
 /******************************************************************************
@@ -48,7 +47,7 @@ OBJECT_DEFINE_STRUCT(Service,
 		     const char* iface;
 		     
 		     // TBD XXX to replace by hashtable XXX
-		     LinkedList	variables;
+		     LIST_DECLARE(variables);
 		     
 		     UpnpClient_Handle ctrlpt_handle;
 		     

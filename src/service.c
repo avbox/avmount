@@ -49,6 +49,12 @@
 // Some reasonable number for number of vararg parameters to SendAction
 #define MAX_VA_PARAMS	64
 
+typedef struct _VariableNode
+{
+	LIST_DECLARE(__head);
+	StringPair *item;
+}
+VariableNode;
 
 /******************************************************************************
  * Service_SubscribeEventURL
@@ -139,15 +145,6 @@ finalize (Object* obj)
 	if (serv) {
 		// If we have a valid control SID, then unsubscribe 
 		(void) Service_UnsubscribeEventURL (serv);
-    
-		/* Delete variable list.
-		 * Note that items are not destroyed : they are talloc'ed and
-		 * automatically deallocated when parent Service is detroyed.
-		 */
-		ListDestroy (&serv->variables, /*freeItem=>*/ 0);
-		
-		// The "talloc'ed" strings will be deleted automatically : 
-		// nothing to do 
 	}
 }
 
@@ -174,16 +171,12 @@ Service_SetSid (Service* serv, Upnp_SID sid)
 /*****************************************************************************
  * GetVariable
  *****************************************************************************/
-static ListNode*
+static VariableNode*
 GetVariable (const Service* serv, const char* name)
 {
 	if (serv && name) {
-		ListNode* node;
-		LinkedList* const variables = 
-			discard_const_p (LinkedList, &serv->variables);
-		for (node = ListHead (variables);
-		     node != NULL;
-		     node = ListNext (variables, node)) {
+		VariableNode* node;
+		LIST_FOREACH(VariableNode*, node, &serv->variables) {
 			StringPair* const var = node->item;
 			if (var && var->name && strcmp (var->name, name) == 0) 
 				return node; // ---------->
@@ -244,7 +237,7 @@ Service_UpdateState (Service* serv, IXML_Document* changedVariables)
 	      Log_Printf (LOG_DEBUG, "Variable Update '%s' = '%s'",
 			  NN(name), NN(value));
 	      
-	      ListNode* node = GetVariable (serv, name);
+	      VariableNode* node = GetVariable (serv, name);
 	      StringPair* var;
 	      if (node) {
 		// Update existing node
@@ -253,10 +246,27 @@ Service_UpdateState (Service* serv, IXML_Document* changedVariables)
 		var->value = talloc_strdup (var, value);
 	      } else {
 		// New node
-		var = talloc (serv, StringPair);
-		var->name  = talloc_strdup (var, name);
-		var->value = talloc_strdup (var, value);
-		ListAddTail (&serv->variables, var);
+		var = talloc_size(serv, sizeof(StringPair) + sizeof(VariableNode));
+		if (var == NULL) {
+                  Log_Print(LOG_ERROR, "Service_UpdateState() -- Out of memory");
+
+		} else {
+#ifdef DEBUG
+                  talloc_set_name(var, "VariableNode");
+#endif
+                  node = (VariableNode*) (((void*) var) + sizeof(StringPair));
+                  node->item = var;
+                  var->value = talloc_strdup(var, value);
+                  var->name  = talloc_strdup(var, name);
+                  if (var->name == NULL || (value != NULL && var->value == NULL)) {
+                    Log_Printf(LOG_ERROR, "Service_UpdateState() --- Out of memory "
+                      "(name='%s'->'%s',value='%s'->'%s')",
+                      name, var->name, value, var->value);
+                    talloc_free(var);
+                  } else {
+                    LIST_ADD(&serv->variables, node);
+                  }
+		}
 	      }
 	      if (OBJECT_METHOD (serv,update_variable))
 		OBJECT_METHOD (serv, update_variable) (serv, 
@@ -507,12 +517,8 @@ get_status_string (const Service* serv,
 	
 	// Print variables
 	tpr (&p, "%s+- ServiceStateTable\n", spacer);
-	ListNode* node;
-	LinkedList* const variables = discard_const_p (LinkedList,
-						       &serv->variables);
-	for (node = ListHead (variables);
-	     node != NULL;
-	     node = ListNext (variables, node)) {
+	VariableNode* node;
+	LIST_FOREACH(VariableNode*, node, &serv->variables) {
 		StringPair* const var = node->item;
 		tpr (&p, "%s|    +- %-10s = %.150s%s\n", spacer, 
 		     NN(var->name), NN(var->value), 
@@ -627,7 +633,7 @@ Service_Create (void* talloc_context,
 	self->iface = talloc_strdup(self, iface);
 	
 	// Initialise list of variables
-	ListInit (&self->variables, 0, 0);
+	LIST_INIT(&self->variables);
 	
 	// For debugging
 	self->la_name = self->la_error_code = self->la_error_desc = NULL;

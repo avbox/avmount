@@ -36,6 +36,7 @@
 #include "log.h"
 #include "service.h"
 #include "talloc_util.h"
+#include "linkedlist.h"
 
 #include <stdbool.h>
 #include <sys/mman.h>
@@ -46,7 +47,6 @@
 #include <upnp/upnp.h>
 #include <upnp/ithread.h>
 #include <upnp/upnptools.h>
-#include <upnp/LinkedList.h>
 
 #ifdef HAVE_MALLOC_TRIM
 #	include <malloc.h>
@@ -55,9 +55,6 @@
 // How often to check advertisement and subscription timeouts for devices
 static const unsigned int CHECK_SUBSCRIPTIONS_TIMEOUT = 30; // in seconds
 
-
-
-static UpnpClient_Handle g_ctrlpt_handle = -1;
 
 
 static ithread_t g_timer_thread;
@@ -78,9 +75,10 @@ static ithread_mutex_t DeviceListMutex;
  * The global device list
  */
 struct _DeviceNode {
-  char*    deviceId; // as reported by the discovery callback
-  Device*  d;
-  int      expires; 
+	LIST_DECLARE(__head);
+	char*    deviceId; // as reported by the discovery callback
+	Device*  d;
+	int      expires;
 };
 typedef struct _DeviceNode DeviceNode;
 
@@ -90,7 +88,7 @@ typedef struct _DeviceNode DeviceNode;
 // TBD to replace with Hash Table for better performances XXX
 // TBD XXX TBD
 //
-static LinkedList GlobalDeviceList;
+LIST_DECLARE_STATIC(GlobalDeviceList);
 
 
 /*****************************************************************************
@@ -108,34 +106,30 @@ static LinkedList GlobalDeviceList;
 static DeviceNode*
 GetDeviceNodeFromName (const char* name, bool log_error)
 {
-  if (name) {
-    ListNode* node;
-    for (node = ListHead (&GlobalDeviceList);
-	 node != 0;
-	 node = ListNext (&GlobalDeviceList, node)) {
-      DeviceNode* const devnode = node->item;
-      if (devnode && devnode->d && 
-	  strcmp (talloc_get_name (devnode->d), name) == 0)
-	return devnode; // ---------->
-    }
-  }
-  if (log_error)
-    Log_Printf (LOG_ERROR, "Error finding Device named %s", NN(name));
-  return 0;
+	if (name) {
+		DeviceNode* devnode;
+		LIST_FOREACH(DeviceNode*, devnode, &GlobalDeviceList) {
+			if (devnode && devnode->d) {
+				if (!strcmp (talloc_get_name (devnode->d), name)) {
+					return devnode;
+				}
+			}
+		}
+	}
+	if (log_error)
+		Log_Printf (LOG_ERROR, "Error finding Device named %s", NN(name));
+	return NULL;
 }
 
-static ListNode*
+static DeviceNode*
 GetDeviceListNodeFromId (const char* deviceId)
 {
 	if (deviceId) {
-		ListNode* node;
-		for (node = ListHead (&GlobalDeviceList);
-			node != 0;
-			node = ListNext (&GlobalDeviceList, node)) {
-			DeviceNode* const devnode = node->item;
+		DeviceNode *devnode;
+		LIST_FOREACH(DeviceNode*, devnode, &GlobalDeviceList) {
 			if (devnode && devnode->deviceId && 
 				strcmp (devnode->deviceId, deviceId) == 0) {
-				return node; // ---------->
+				return devnode; // ---------->
 			}
 		}
 	}
@@ -145,11 +139,8 @@ GetDeviceListNodeFromId (const char* deviceId)
 static Service*
 GetService (const char* s, enum GetFrom from) 
 {
-	ListNode* node;
-	for (node = ListHead (&GlobalDeviceList);
-	     node != NULL;
-	     node = ListNext (&GlobalDeviceList, node)) {
-		DeviceNode* const devnode = node->item;
+	DeviceNode *devnode;
+	LIST_FOREACH(DeviceNode*, devnode, &GlobalDeviceList) {
 		if (devnode) {
 			Service* const serv = Device_GetServiceFrom 
 				(devnode->d, s, from, false);
@@ -207,11 +198,9 @@ DeviceList_RemoveDevice (const char* deviceId)
 
 	ithread_mutex_lock (&DeviceListMutex);
 	
-	ListNode* const node = GetDeviceListNodeFromId (deviceId);
-	if (node) {
-		DeviceNode* devnode = node->item;
-		node->item = 0;
-		ListDelNode (&GlobalDeviceList, node, /*freeItem=>*/ 0);
+	DeviceNode* const devnode = GetDeviceListNodeFromId (deviceId);
+	if (devnode) {
+		LIST_REMOVE(devnode);
 		talloc_free (devnode);
 	} else {
 		rc = UPNP_E_INVALID_DEVICE;
@@ -236,46 +225,14 @@ DeviceList_RemoveDevice (const char* deviceId)
 static int
 DeviceList_RemoveAll (void)
 {
-  ithread_mutex_lock( &DeviceListMutex );
-
-  ListNode* node;
-  for (node = ListHead (&GlobalDeviceList);
-       node != 0;
-       node = ListNext (&GlobalDeviceList, node)) {
-    DeviceNode* devnode = node->item;
-    node->item = 0;
-    talloc_free (devnode);
-  }
-  ListDestroy (&GlobalDeviceList, /*freeItem=>*/ 0);
-  ListInit (&GlobalDeviceList, 0, 0);
-
-  ithread_mutex_unlock( &DeviceListMutex );
-  
-  return UPNP_E_SUCCESS;
-}
-
-
-
-/*****************************************************************************
- * DeviceList_RefreshAll
- *****************************************************************************/
-int
-DeviceList_RefreshAll (bool remove_all)
-{
-	if (remove_all)
-		(void) DeviceList_RemoveAll();
-  
-	/*
-	 * Search for all 'target' providers,
-	 * waiting for up to 5 seconds for the response 
-	 */
-	Log_Printf (LOG_DEBUG, "RefreshAll target=%s", NN(g_ssdp_target));
-	int rc = UpnpSearchAsync (g_ctrlpt_handle, 5 /* seconds */, 
-				  g_ssdp_target, NULL);
-	if (UPNP_E_SUCCESS != rc) 
-		Log_Printf (LOG_ERROR, "Error sending search request %d", rc);
-	
-	return rc;
+	ithread_mutex_lock( &DeviceListMutex );
+	DeviceNode *devnode;
+	LIST_FOREACH_SAFE(DeviceNode*, devnode, &GlobalDeviceList, {
+		LIST_REMOVE(devnode);
+		talloc_free(devnode);
+	});
+	ithread_mutex_unlock( &DeviceListMutex );
+	return UPNP_E_SUCCESS;
 }
 
 
@@ -329,10 +286,7 @@ AddDevice (const char *iface, const char* deviceId,
 {
 	ithread_mutex_lock (&DeviceListMutex);
 
-	DeviceNode* devnode = NULL;
-	ListNode* node = GetDeviceListNodeFromId (deviceId);
-	if (node) 
-		devnode = node->item;
+	DeviceNode* devnode = GetDeviceListNodeFromId(deviceId);
 	
 	if (devnode) {
 		// The device is already there, so just update 
@@ -428,8 +382,7 @@ AddDevice (const char *iface, const char* deviceId,
 			// device has not already been added by another thread
 			// while the list was unlocked)
 			ithread_mutex_lock (&DeviceListMutex);
-			node = GetDeviceListNodeFromId (deviceId);
-			if (node) {
+			if (GetDeviceListNodeFromId(deviceId) != NULL) {
 				Log_Printf (LOG_WARNING, 
 					    "Device Id=%s already added",
 					    NN(deviceId));
@@ -463,7 +416,7 @@ AddDevice (const char *iface, const char* deviceId,
 					    NN(deviceId), descLocation);
 
 				// Insert the new device node in the list
-				ListAddTail (&GlobalDeviceList, devnode);
+				LIST_ADD(&GlobalDeviceList, devnode);
 
 				Device_SusbcribeAllEvents (iface, devnode->d);
 			}
@@ -759,13 +712,10 @@ DeviceList_GetDevicesNames (void* context)
 
 	Log_Printf (LOG_DEBUG, "GetDevicesNames");
 	PtrArray* const a = PtrArray_CreateWithCapacity 
-		(context, ListSize (&GlobalDeviceList));
+		(context, LIST_SIZE(&GlobalDeviceList));
 	if (a) {
-		ListNode* node;
-		for (node = ListHead (&GlobalDeviceList);
-		     node != 0;
-		     node = ListNext (&GlobalDeviceList, node)) {
-			const DeviceNode* const devnode = node->item;
+		DeviceNode *devnode;
+		LIST_FOREACH(DeviceNode*, devnode, &GlobalDeviceList) {
 			if (devnode) {
 				const char* const name = 
 					(devnode->d ? 
@@ -790,27 +740,24 @@ DeviceList_GetDevicesNames (void* context)
 char*
 DeviceList_GetStatusString (void* context)
 {
-  char* ret = talloc_strdup (context, "");
-  if (ret) {
-    ithread_mutex_lock (&DeviceListMutex);
+	char* ret = talloc_strdup (context, "");
+	if (ret) {
+		ithread_mutex_lock (&DeviceListMutex);
     
-    // Print the universal device names for each device 
-    // in the global device list
-    ListNode* node;
-    for (node = ListHead (&GlobalDeviceList);
-	 node != 0;
-	 node = ListNext (&GlobalDeviceList, node)) {
-      const DeviceNode* const devnode = node->item;
-      if (devnode) {
-	const char* const name = 
-	  (devnode->d ? talloc_get_name(devnode->d) : 0);
-	ret = talloc_asprintf_append (ret, " %-20s -- %s\n", 
-				      NN(name), NN(devnode->deviceId));
-      }
-    }
-    ithread_mutex_unlock (&DeviceListMutex);
-  }
-  return ret;
+		// Print the universal device names for each device
+		// in the global device list
+		DeviceNode *devnode;
+		LIST_FOREACH(DeviceNode*, devnode, &GlobalDeviceList) {
+			if (devnode) {
+				const char* const name =
+					(devnode->d ? talloc_get_name(devnode->d) : 0);
+				ret = talloc_asprintf_append (ret, " %-20s -- %s\n",
+					NN(name), NN(devnode->deviceId));
+			}
+		}
+		ithread_mutex_unlock (&DeviceListMutex);
+	}
+	return ret;
 }
 
 
@@ -858,42 +805,35 @@ DeviceList_GetDeviceStatusString (void* context, const char* deviceName,
 static void
 DeviceList_VerifyTimeouts (int incr)
 {
-  ithread_mutex_lock (&DeviceListMutex);
-  
-  // During this traversal we pre-compute the next node in case 
-  // the current node is deleted
-  ListNode* node, *nextnode = 0;
-  for (node = ListHead (&GlobalDeviceList); node != 0; node = nextnode) {
-    nextnode = ListNext (&GlobalDeviceList, node);
+	ithread_mutex_lock (&DeviceListMutex);
 
-    DeviceNode* devnode = node->item;
-    devnode->expires -= incr;
-    if (devnode->expires <= 0) {
-
-      char *descDocText;
+	DeviceNode *devnode;
+	LIST_FOREACH_SAFE(DeviceNode*, devnode, &GlobalDeviceList, {
+		devnode->expires -= incr;
+		if (devnode->expires <= 0) {
+			char *descDocText;
 			const char *descDocURL = Device_GetDescDocURL(devnode->d);
-      char content_type[LINE_SIZE];
-      int rc = UpnpDownloadUrlItem (descDocURL, &descDocText,
-        content_type);
-      if (rc != UPNP_E_SUCCESS) {
-        /*
-         * This advertisement has expired, so we should remove the device
-         * from the list
-         */
-        Log_Printf (LOG_DEBUG, "Remove expired device Id=%s", devnode->deviceId);
-        node->item = 0;
-        ListDelNode (&GlobalDeviceList, node, /*freeItem=>*/ 0);
-        talloc_free (devnode);
-      } else {
+			char content_type[LINE_SIZE];
+			int rc = UpnpDownloadUrlItem (descDocURL, &descDocText,
+				content_type);
+			if (rc != UPNP_E_SUCCESS) {
+				/*
+				 * This advertisement has expired, so we should remove the device
+				 * from the list
+				 */
+				Log_Printf (LOG_DEBUG, "Remove expired device Id=%s", devnode->deviceId);
+				LIST_REMOVE(devnode);
+				talloc_free(devnode);
+			} else {
 				/* TODO: Should we check that descDocText hasn't changed
 				 * and update it if it has?
 				 */
-        free(descDocText);
-        devnode->expires = 60;
-      }
-    }
-  }
-  ithread_mutex_unlock (&DeviceListMutex);
+				free(descDocText);
+				devnode->expires = 60;
+			}
+		}
+	});
+	ithread_mutex_unlock (&DeviceListMutex);
 }
 
 
@@ -904,10 +844,8 @@ static void
 DeviceList_GC()
 {
 	ithread_mutex_lock (&DeviceListMutex);
-	ListNode* node;
-	for (node = ListHead (&GlobalDeviceList);
-		node != 0; node = ListNext(&GlobalDeviceList, node)) {
-		DeviceNode *devnode = node->item;
+	DeviceNode *devnode;
+	LIST_FOREACH(DeviceNode*, devnode, &GlobalDeviceList) {
 		Device_GC(devnode->d);
 	}
 #ifdef HAVE_MALLOC_TRIM
@@ -951,7 +889,7 @@ DeviceList_Init()
 {
 	ithread_mutex_init (&DeviceListMutex, NULL);
 
-	ListInit (&GlobalDeviceList, 0, 0);
+	LIST_INIT(&GlobalDeviceList);
 
 	// Makes the XML parser more tolerant to malformed text
 	ixmlRelaxParser ('?');
@@ -968,6 +906,5 @@ void
 DeviceList_Destroy()
 {
 	DeviceList_RemoveAll();
-	ListDestroy(&GlobalDeviceList, 0);
 }
 

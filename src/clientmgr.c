@@ -48,12 +48,14 @@
 #include "talloc_util.h"
 #include "stream.h"
 #include "fuse_fs.h"
+#include "linkedlist.h"
 
 /*
  * Structure used to represent a network interface
  */
 struct iface_entry
 {
+	LIST_DECLARE(__head);
 	char *name;
 	int keep;
 	int eventsfd;
@@ -64,14 +66,6 @@ struct iface_entry
 	pthread_mutex_t mutex;
 	pthread_mutex_t event_lock;
 	UpnpClient_Handle handle;
-	struct iface_entry *prev;
-	struct iface_entry *next;
-};
-
-struct iface_list
-{
-	struct iface_entry *first;
-	struct iface_entry *last;
 };
 
 typedef enum
@@ -86,8 +80,9 @@ command_t;
 static void *context = NULL;
 static int abort_mon = 0;
 static pid_t mainpid = 0;
-static struct iface_list ifaces = { NULL };
 static pthread_t monthread;
+
+LIST_DECLARE_STATIC(ifaces);
 
 int
 DeviceList_EventHandlerCallback(
@@ -669,7 +664,7 @@ ClientManager_AddInterface(char *name)
 
 	Log_Printf(LOG_INFO, "ClientManager: Adding interface: %s", name);
 
-	iface = talloc(context, struct iface_entry);
+	iface = talloc_zero(context, struct iface_entry);
 	if (iface == NULL) {
 		Log_Printf(LOG_ERROR, "ClientManager_AddInterface() -- Out of memory");
 		return -1;
@@ -681,8 +676,6 @@ ClientManager_AddInterface(char *name)
 
 	iface->name = talloc_strdup(iface, name);
 	iface->keep = 1;
-	iface->prev = NULL;
-	iface->next = NULL;
 
 	if (iface->name == NULL) {
 		talloc_free(iface);
@@ -693,14 +686,7 @@ ClientManager_AddInterface(char *name)
 	ClientManager_RunClient(iface);
 
 	/* add interface to list */
-	if (ifaces.first == NULL || ifaces.last == NULL) {
-		assert(ifaces.first == ifaces.last);
-		ifaces.first = ifaces.last = iface;
-	} else {
-		iface->prev = ifaces.last;
-		ifaces.last->next = iface;
-		ifaces.last = iface;
-	}
+	LIST_ADD(&ifaces, iface);
 
 	return 0;
 }
@@ -723,21 +709,10 @@ ClientManager_RemoveInterface(struct iface_entry *entry)
 		pthread_join(entry->thread, NULL);
 	}
 
-	if (entry->prev == NULL) {
-		assert(ifaces.first == entry);
-		ifaces.first = entry->next;
-	} else {
-		entry->prev->next = entry->next;
-	}
-	if (entry->next == NULL) {
-		assert(ifaces.last == entry);
-		ifaces.last = entry->prev;
-	} else {
-		entry->next->prev = entry->prev;
-	}
-	talloc_free(entry);
-
+	/* remove from list and destroy */
+	LIST_REMOVE(entry);
 	pthread_mutex_unlock(&entry->mutex);
+	talloc_free(entry);
 }
 
 /**
@@ -747,12 +722,11 @@ ClientManager_RemoveInterface(struct iface_entry *entry)
 static struct iface_entry*
 ClientManager_FindInterface(const char *name)
 {
-	struct iface_entry *ent = ifaces.first;
-	while (ent != NULL) {
+	struct iface_entry *ent;
+	LIST_FOREACH(struct iface_entry*, ent, &ifaces) {
 		if (!strcmp(name, ent->name)) {
 			return ent;
 		}
-		ent = ent->next;
 	}
 	return NULL;
 }
@@ -764,10 +738,9 @@ ClientManager_FindInterface(const char *name)
 static void
 ClientManager_CleanupInit()
 {
-	struct iface_entry *ent = ifaces.first;
-	while (ent != NULL) {
+	struct iface_entry *ent;
+	LIST_FOREACH(struct iface_entry*, ent, &ifaces) {
 		ent->keep = 0;
-		ent = ent->next;
 	}
 }
 
@@ -778,14 +751,12 @@ ClientManager_CleanupInit()
 static void
 ClientManager_Cleanup()
 {
-	struct iface_entry *ent = ifaces.first;
-	while (ent != NULL) {
-		struct iface_entry *next = ent->next;
+	struct iface_entry *ent;
+	LIST_FOREACH_SAFE(struct iface_entry*, ent, &ifaces, {
 		if (!ent->keep) {
 			ClientManager_RemoveInterface(ent);
 		}
-		ent = next;
-	}
+	});
 }
 
 /**
@@ -795,15 +766,14 @@ ClientManager_Cleanup()
 static void
 ClientManager_CheckClients()
 {
-	struct iface_entry *ent = ifaces.first;
-	while (ent != NULL) {
+	struct iface_entry *ent;
+	LIST_FOREACH(struct iface_entry*, ent, &ifaces) {
 		if (ent->pid == -1) {
 			Log_Printf(LOG_ERROR, "ClientManager: "
 				"Client for interface %s died. Restarting",
 				ent->name);
 			ClientManager_RunClient(ent);
 		}
-		ent = ent->next;
 	}
 }
 
@@ -818,9 +788,6 @@ ClientManager_MonitorInterfaces(void *arg)
 	const char * const sysfs_net = "/sys/class/net";
 
 	(void) arg;
-
-	ifaces.first = NULL;
-	ifaces.last = NULL;
 
 	while (abort_mon == 0) {
 		DIR *dir = opendir(sysfs_net);
@@ -907,6 +874,9 @@ ClientManager_MonitorInterfaces(void *arg)
 void
 ClientManager_Start()
 {
+
+	LIST_INIT(&ifaces);
+
 	mainpid = getpid();
 	context = talloc_new(NULL);
 	if (context == NULL) {
