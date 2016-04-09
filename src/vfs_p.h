@@ -44,7 +44,7 @@
  *****************************************************************************/
 
 OBJECT_DEFINE_STRUCT(VFS,
-		     
+
 		     bool show_debug_dir;
 		     
                      );
@@ -63,8 +63,9 @@ typedef VFS_BrowseStatus (*VFS_BrowseFunction) (VFS* self,
 OBJECT_DEFINE_METHODS(VFS,
 		      
 		      VFS_BrowseFunction browse_root;
-
+#ifdef DEBUG
 		      VFS_BrowseFunction browse_debug;
+#endif
 
                       );
 

@@ -37,6 +37,7 @@
 #include "content_dir.h"
 #include "device_list.h"
 #include "xml_util.h"
+#include "clientmgr.h"
 
 
 
@@ -224,7 +225,7 @@ vfs_set_time (const time_t t, register const VFS_Query* const q)
 /*****************************************************************************
  * BrowseDebug
  *****************************************************************************/
-
+#ifdef DEBUG
 static VFS_BrowseStatus
 BrowseDebug (VFS* const self, const char* const sub_path,
 	     const VFS_Query* const query, void* const tmp_ctx)
@@ -255,6 +256,7 @@ BrowseDebug (VFS* const self, const char* const sub_path,
 			StringStream* const ss = StringStream_Create (tmp_ctx);
 			FILE* const file = StringStream_GetFile (ss);
 			talloc_report (NULL, file);
+			ClientManager_Talloc_Report(file);
 			const char* const str = StringStream_GetSnapshot 
 				(ss, tmp_ctx, NULL);
 			FILE_SET_STRING (str, FILE_BUFFER_STRING_STEAL);
@@ -264,6 +266,7 @@ BrowseDebug (VFS* const self, const char* const sub_path,
 			StringStream* const ss = StringStream_Create (tmp_ctx);
 			FILE* const file = StringStream_GetFile (ss);
 			talloc_report_full (NULL, file);
+			ClientManager_Talloc_Report_Full(file);
 			const char* const str = StringStream_GetSnapshot 
 				(ss, tmp_ctx, NULL);
 			FILE_SET_STRING (str, FILE_BUFFER_STRING_STEAL);
@@ -272,6 +275,7 @@ BrowseDebug (VFS* const self, const char* const sub_path,
 	} BROWSE_END;
 	return BROWSE_RESULT;
 }
+#endif
 
 
 /*****************************************************************************
@@ -305,6 +309,7 @@ VFS_Browse (VFS* const self, const VFS_Query* q)
 				BROWSE_SUB (func (self, BROWSE_PTR, q, 
 						  tmp_ctx));
 			}
+#ifdef DEBUG
 			if (self->show_debug_dir) {
 				DIR_BEGIN(VFS_DEBUG_DIR_BASENAME) {
 					func = OBJECT_METHOD (self, 
@@ -316,6 +321,7 @@ VFS_Browse (VFS* const self, const VFS_Query* q)
 					}
 				} DIR_END;
 			}
+#endif
 		} DIR_END;
 	} BROWSE_END;
 	
@@ -356,7 +362,9 @@ static void
 init_class (VFS_Class* const isa)
 {
         isa->browse_root  = NULL;
+#ifdef DEBUG
         isa->browse_debug = BrowseDebug;
+#endif
 }
 
 OBJECT_INIT_CLASS(VFS, Object, init_class);
@@ -369,9 +377,13 @@ VFS*
 VFS_Create (void* talloc_context, bool show_debug_dir)
 {
 	OBJECT_SUPER_CONSTRUCT (VFS, Object_Create, talloc_context, NULL);
+#ifdef DEBUG
         if (self) {
 		self->show_debug_dir = show_debug_dir;
 	}
+#else
+	(void) show_debug_dir;
+#endif
 	return self;
 }
 

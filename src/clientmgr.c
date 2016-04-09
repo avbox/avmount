@@ -49,6 +49,7 @@
 #include "stream.h"
 #include "fuse_fs.h"
 #include "linkedlist.h"
+#include "string_util.h"
 
 /*
  * Structure used to represent a network interface
@@ -73,6 +74,10 @@ typedef enum
 	CMD_UPNP_SUBSCRIBE,
 	CMD_UPNP_SEND_ACTION,
 	CMD_UPNP_UNSUBSCRIBE,
+#ifdef DEBUG
+	CMD_TALLOC_REPORT,
+	CMD_TALLOC_REPORT_FULL,
+#endif
 	CMD_UPNP_EXIT
 }
 command_t;
@@ -83,6 +88,7 @@ static pid_t mainpid = 0;
 static pthread_t monthread;
 
 LIST_DECLARE_STATIC(ifaces);
+static pthread_mutex_t list_lock = PTHREAD_MUTEX_INITIALIZER;
 
 int
 DeviceList_EventHandlerCallback(
@@ -101,16 +107,16 @@ DeviceList_EventHandlerCallback(
 #define PROCESS_EVENT(iface, event_type, event_data, handle) \
 	DeviceList_EventHandlerCallback(iface->name, event_type, event_data, handle);
 
-#define FIND_INTERFACE(iface, name, onerror) \
-	iface = ClientManager_FindInterface(name); \
+#define FIND_INTERFACE(iface, name, locked, onerror) \
+	iface = ClientManager_FindInterface(name, locked); \
 	if (iface == NULL) { \
 		Log_Printf(LOG_ERROR, "Cannot find interface: %s", name); \
 		onerror; \
 	}
 
-#define LOCK_INTERFACE(iface, name, onerror) \
+#define LOCK_INTERFACE(iface, name, list_locked, onerror) \
 	pthread_mutex_lock(&iface->mutex); \
-	if (ClientManager_FindInterface(name) != iface) { \
+	if (ClientManager_FindInterface(name, list_locked) != iface) { \
 		pthread_mutex_unlock(&iface->mutex); \
 		onerror; \
 	}
@@ -421,6 +427,42 @@ ClientManager_ClientLoop(struct iface_entry *iface, int eventsfd, int infd, int 
 				ixmlDocument_free(res);
 				break;
 			}
+#ifdef DEBUG
+			case CMD_TALLOC_REPORT:
+			{
+				void *tmp_ctx = talloc_new(context);
+				if (tmp_ctx == NULL) {
+					PIPE_WRITE_STRING(outfd, "");
+				} else {
+					talloc_set_name(tmp_ctx, "talloc_report");
+					StringStream* const ss = StringStream_Create (tmp_ctx);
+					FILE* const file = StringStream_GetFile (ss);
+					talloc_report(NULL, file);
+					const char* const str = StringStream_GetSnapshot
+						(ss, tmp_ctx, NULL);
+					PIPE_WRITE_STRING(outfd, str);
+					talloc_free(tmp_ctx);
+				}
+				break;
+			}
+			case CMD_TALLOC_REPORT_FULL:
+			{
+				void *tmp_ctx = talloc_new(context);
+				if (tmp_ctx == NULL) {
+					PIPE_WRITE_STRING(outfd, "");
+				} else {
+					talloc_set_name(tmp_ctx, "talloc_report_full");
+					StringStream* const ss = StringStream_Create (tmp_ctx);
+					FILE* const file = StringStream_GetFile (ss);
+					talloc_report_full(NULL, file);
+					const char* const str = StringStream_GetSnapshot
+						(ss, tmp_ctx, NULL);
+					PIPE_WRITE_STRING(outfd, str);
+					talloc_free(tmp_ctx);
+				}
+				break;
+			}
+#endif
 			case CMD_UPNP_EXIT:
 			{
 				Log_Printf(LOG_DEBUG, "Client[%i]: Exit command received",
@@ -722,13 +764,22 @@ ClientManager_RemoveInterface(struct iface_entry *entry)
  * entry on the list by it's name
  */
 static struct iface_entry*
-ClientManager_FindInterface(const char *name)
+ClientManager_FindInterface(const char *name, int locked)
 {
 	struct iface_entry *ent;
+	if (!locked) {
+		pthread_mutex_lock(&list_lock);
+	}
 	LIST_FOREACH(struct iface_entry*, ent, &ifaces) {
 		if (!strcmp(name, ent->name)) {
+			if (!locked) {
+				pthread_mutex_unlock(&list_lock);
+			}
 			return ent;
 		}
+	}
+	if (!locked) {
+		pthread_mutex_unlock(&list_lock);
 	}
 	return NULL;
 }
@@ -741,9 +792,11 @@ static void
 ClientManager_CleanupInit()
 {
 	struct iface_entry *ent;
+	pthread_mutex_lock(&list_lock);
 	LIST_FOREACH(struct iface_entry*, ent, &ifaces) {
 		ent->keep = 0;
 	}
+	pthread_mutex_unlock(&list_lock);
 }
 
 /**
@@ -754,11 +807,13 @@ static void
 ClientManager_Cleanup()
 {
 	struct iface_entry *ent;
+	pthread_mutex_lock(&list_lock);
 	LIST_FOREACH_SAFE(struct iface_entry*, ent, &ifaces, {
 		if (!ent->keep) {
 			ClientManager_RemoveInterface(ent);
 		}
 	});
+	pthread_mutex_unlock(&list_lock);
 }
 
 /**
@@ -769,6 +824,7 @@ static void
 ClientManager_CheckClients()
 {
 	struct iface_entry *ent;
+	pthread_mutex_lock(&list_lock);
 	LIST_FOREACH(struct iface_entry*, ent, &ifaces) {
 		if (ent->pid == -1) {
 			Log_Printf(LOG_ERROR, "ClientManager: "
@@ -777,6 +833,7 @@ ClientManager_CheckClients()
 			ClientManager_RunClient(ent);
 		}
 	}
+	pthread_mutex_unlock(&list_lock);
 }
 
 /**
@@ -853,8 +910,14 @@ ClientManager_MonitorInterfaces(void *arg)
 				continue;
 			}
 
-			if ((ent = ClientManager_FindInterface(dp->d_name)) == NULL) {
-				ClientManager_AddInterface(dp->d_name);
+			if ((ent = ClientManager_FindInterface(dp->d_name, 0)) == NULL) {
+				pthread_mutex_lock(&list_lock);
+				if ((ent = ClientManager_FindInterface(dp->d_name, 1)) == NULL) {
+					ClientManager_AddInterface(dp->d_name);
+				} else {
+					ent->keep = 1;
+				}
+				pthread_mutex_unlock(&list_lock);
 			} else {
 				ent->keep = 1;
 			}
@@ -895,6 +958,7 @@ ClientManager_Start()
 
 	if (pthread_create(&monthread, NULL, ClientManager_MonitorInterfaces, NULL) != 0) {
 		Log_Printf(LOG_ERROR, "ClientManager: pthread_create() failed");
+		abort();
 	}
 }
 
@@ -926,8 +990,8 @@ ClientManager_UpnpSubscribe(const char *iface_name,
 	int ret;
 	const command_t cmd = CMD_UPNP_SUBSCRIBE;
 	struct iface_entry *iface;
-	FIND_INTERFACE(iface, iface_name, return -1);
-	LOCK_INTERFACE(iface, iface_name, return -1);
+	FIND_INTERFACE(iface, iface_name, 0, return -1);
+	LOCK_INTERFACE(iface, iface_name, 0, return -1);
 	PIPE_WRITE_VALUE(iface->infd, cmd);
 	PIPE_WRITE_VALUE(iface->infd, ctrlpt_handle);
 	PIPE_WRITE_STRING(iface->infd, eventURL);
@@ -960,8 +1024,8 @@ ClientManager_UpnpUnSubscribe(const char *iface_name,
 		return 0;
 	}
 
-	FIND_INTERFACE(iface, iface_name, return 0);
-	LOCK_INTERFACE(iface, iface_name, return 0);
+	FIND_INTERFACE(iface, iface_name, 0, return 0);
+	LOCK_INTERFACE(iface, iface_name, 0, return 0);
 	PIPE_WRITE_VALUE(iface->infd, cmd);
 	PIPE_WRITE_VALUE(iface->infd, handle);
 	PIPE_WRITE_SID(iface->infd, sid);
@@ -988,8 +1052,8 @@ ClientManager_UpnpSendAction(const char *iface_name,
 	const command_t cmd = CMD_UPNP_SEND_ACTION;
 	struct iface_entry *iface;
 	IXML_Document *doc = NULL;
-	FIND_INTERFACE(iface, iface_name, return -1);
-	LOCK_INTERFACE(iface, iface_name, return -1);
+	FIND_INTERFACE(iface, iface_name, 0, return -1);
+	LOCK_INTERFACE(iface, iface_name, 0, return -1);
 	PIPE_WRITE_VALUE(iface->infd, cmd);
 	PIPE_WRITE_VALUE(iface->infd, handle);
 	PIPE_WRITE_STRING(iface->infd, actionURL);
@@ -1001,4 +1065,62 @@ ClientManager_UpnpSendAction(const char *iface_name,
 	*resp = doc;
 	return ret;
 }
+
+#ifdef DEBUG
+/**
+ * ClientManager_Talloc_Report() -- Prints the talloc_report() of
+ * each child to the stream.
+ */
+void
+ClientManager_Talloc_Report(FILE *file)
+{
+	struct iface_entry *iface;
+	char *str;
+	const command_t cmd = CMD_TALLOC_REPORT;
+	pthread_mutex_lock(&list_lock);
+	LIST_FOREACH(struct iface_entry*, iface, &ifaces) {
+		LOCK_INTERFACE(iface, iface->name, 1, return);
+		PIPE_WRITE_VALUE(iface->infd, cmd);
+		PIPE_READ_STRING(iface->outfd, str);
+
+		fprintf(file, "\n==========================================\n");
+		fprintf(file, "talloc report for process: %i (%s)",
+			getpid(), iface->name);
+		fprintf(file, "\n==========================================\n\n");
+		fprintf(file, "%s", str);
+
+		PIPE_FREE_STRING(str);
+		UNLOCK_INTERFACE(iface);
+	}
+	pthread_mutex_unlock(&list_lock);
+}
+
+/**
+ * ClientManager_Talloc_Report_Full() -- Prints the talloc_report_full()
+ * of each child to the stream.
+ */
+void
+ClientManager_Talloc_Report_Full(FILE *file)
+{
+	struct iface_entry *iface;
+	char *str;
+	const command_t cmd = CMD_TALLOC_REPORT_FULL;
+	pthread_mutex_lock(&list_lock);
+	LIST_FOREACH(struct iface_entry*, iface, &ifaces) {
+		LOCK_INTERFACE(iface, iface->name, 1, return);
+		PIPE_WRITE_VALUE(iface->infd, cmd);
+		PIPE_READ_STRING(iface->outfd, str);
+
+		fprintf(file, "\n==========================================\n");
+		fprintf(file, "talloc report for process: %i (%s)",
+			getpid(), iface->name);
+		fprintf(file, "\n==========================================\n\n");
+		fprintf(file, "%s", str);
+
+		PIPE_FREE_STRING(str);
+		UNLOCK_INTERFACE(iface);
+	}
+	pthread_mutex_unlock(&list_lock);
+}
+#endif
 

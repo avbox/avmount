@@ -412,7 +412,7 @@ BrowseRoot (VFS* const vfs, const char* const sub_path,
 /*****************************************************************************
  * BrowseDebug
  *****************************************************************************/
-
+#ifdef DEBUG
 static VFS_BrowseStatus
 BrowseDebug (VFS* const vfs, const char* const sub_path,
 	    const VFS_Query* const query, void* const tmp_ctx)
@@ -493,7 +493,7 @@ BrowseDebug (VFS* const vfs, const char* const sub_path,
   
   return BROWSE_RESULT;
 }
-
+#endif
 
 /******************************************************************************
  * finalize
@@ -527,7 +527,9 @@ init_class (DJFS_Class* const isa)
 {
   CLASS_BASE_CAST(isa)->finalize      = finalize;
   CLASS_SUPER_CAST(isa)->browse_root  = BrowseRoot;
+#ifdef DEBUG
   CLASS_SUPER_CAST(isa)->browse_debug = BrowseDebug;
+#endif
 }
 
 OBJECT_INIT_CLASS(DJFS, VFS, init_class);

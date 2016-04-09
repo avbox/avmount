@@ -22,6 +22,10 @@
 #ifndef __NETMON_H__
 #define __NETMON_H__
 
+#ifdef DEBUG
+#	include <stdio.h>
+#endif
+
 void
 ClientManager_Start();
 
@@ -47,6 +51,14 @@ ClientManager_UpnpSendAction(const char *iface_name,
 
 int
 ClientManager_UpnpSetMaxContentLength(const char *ifname, size_t contentLength);
+
+#ifdef DEBUG
+void
+ClientManager_Talloc_Report(FILE* file);
+
+void
+ClientManager_Talloc_Report_Full(FILE* file);
+#endif
 
 #endif
 
