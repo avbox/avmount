@@ -24,6 +24,7 @@
 #endif
 
 #include <stdio.h>
+#include <stdint.h>
 #include <string.h>
 #include <sys/time.h>
 #include <stdlib.h>
@@ -699,6 +700,13 @@ Stream_Read(Stream *file, void *ptr, size_t size)
 
 	if (UNLIKELY(size == 0)) {
 		goto STREAM_READ_EXIT;
+	}
+
+	/* Make sure size is not too big to handle */
+	if (UNLIKELY(size > (SIZE_MAX / 2))) {
+		Log_Printf(LOG_WARNING, "Stream_Read() -- Size would cause overflow. Truncating to %zd",
+			SIZE_MAX / 2);
+		size = (SIZE_MAX / 2);
 	}
 
 	/* signal worker that we want data */
