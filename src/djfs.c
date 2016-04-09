@@ -42,9 +42,7 @@
 
 /*****************************************************************************
 
- <mount point> -+- devices
-                |
-                |- <devName> -+- .status -> ../.debug/<devName>/status
+ <mount point> -+- <devName> -+- .status -> ../.debug/<devName>/status
                 |             |
                 |             +- xxx -+- xxx
                 |             |       |- xxx
@@ -355,18 +353,6 @@ BrowseRoot (VFS* const vfs, const char* const sub_path,
   BROWSE_BEGIN(sub_path, query) {
     
     const PtrArray* const names = DeviceList_GetDevicesNames (tmp_ctx);
-    
-    FILE_BEGIN(".devices") {
-      if (names) {
-	char* str = talloc_strdup(tmp_ctx, "");
-	const char* devName;
-	PTR_ARRAY_FOR_EACH_PTR (names, devName) {
-	  str = talloc_asprintf_append (str, "%s\n", devName);
-	} PTR_ARRAY_FOR_EACH_PTR_END;
-	FILE_SET_STRING (str, FILE_BUFFER_STRING_STEAL);
-      }
-      // else content defaults to NULL if no devices
-    } FILE_END;
     
     const char* devName;
     PTR_ARRAY_FOR_EACH_PTR (names, devName) {
