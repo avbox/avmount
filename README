@@ -3,11 +3,11 @@ avmount
 =======
 
 avmount - Mount MediaServers content as a Linux filesystem.
-Created 23/04/2005, Rémi Turboult <r3mi@users.sourceforge.net>
+Created 23/04/2005, RÃ©mi Turboult <r3mi@users.sourceforge.net>
 
 
 avmount is a UPnP AV client based on djmount. Originally created
-by Rémi Turboult <r3mi@users.sourceforge.net> on 23/04/2005. It mounts as a
+by RÃ©mi Turboult <r3mi@users.sourceforge.net> on 23/04/2005. It mounts as a
 Linux filesystem (using FUSE) the media content of compatible UPnP AV devices
 (see "Known Compatible Devices" paragraph below).
 
@@ -291,7 +291,7 @@ Copyright and Licenses
 avmount is free software :
 
 
-* "avmount" is (C) Copyright 2005-2006 Rémi Turboult.
+* "avmount" is (C) Copyright 2005-2006 RÃ©mi Turboult.
                (C) Copyright 2016 Fernando Rodriguez
 
 This program is free software; you can redistribute it and/or modify

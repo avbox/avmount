@@ -12,7 +12,7 @@
  * Includes some code adapted from "libiconv-1.9.1/lib/utf8.h"
  * Copyright (C) 1999-2001 Free Software Foundation, Inc.
  *
- * Modified for djmount (C) 2005, Rémi Turboult <r3mi@users.sourceforge.net>
+ * Modified for djmount (C) 2005, RÃ©mi Turboult <r3mi@users.sourceforge.net>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by

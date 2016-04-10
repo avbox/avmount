@@ -4,7 +4,7 @@
  * Testing of UPnP classes.
  * This file is part of djmount.
  *
- * (C) Copyright 2005-2006 Rémi Turboult <r3mi@users.sourceforge.net>
+ * (C) Copyright 2005-2006 RÃ©mi Turboult <r3mi@users.sourceforge.net>
  *
  * Part derived from libupnp example (libupnp/upnp/sample/tvctrlpt/linux/...)
  * Copyright (c) 2000-2003 Intel Corporation

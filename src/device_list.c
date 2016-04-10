@@ -5,7 +5,7 @@
  * This file is part of avmount.
  *
  * (C) Copyright 2016 Fernando Rodriguez
- * (C) Copyright 2005 Rémi Turboult <r3mi@users.sourceforge.net>
+ * (C) Copyright 2005 RÃ©mi Turboult <r3mi@users.sourceforge.net>
  *
  * Part derived from libupnp example (upnp/sample/tvctrlpt/upnp_tv_ctrlpt.c)
  * Copyright (c) 2000-2003 Intel Corporation

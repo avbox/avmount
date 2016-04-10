@@ -3,7 +3,7 @@
  * UPnP Utilities
  * This file is part of djmount.
  *
- * (C) Copyright 2005 Rémi Turboult <r3mi@users.sourceforge.net>
+ * (C) Copyright 2005 RÃ©mi Turboult <r3mi@users.sourceforge.net>
  *
  * Part derived from libupnp example (upnp/sample/common/sample_util.h)
  * Copyright (c) 2000-2003 Intel Corporation

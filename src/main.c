@@ -4,7 +4,7 @@
  * This file is part of avmount.
  *
  * (C) Copyright 2016 Fernando Rodriguez
- * (C) Copyright 2005 Rémi Turboult <r3mi@users.sourceforge.net>
+ * (C) Copyright 2005 RÃ©mi Turboult <r3mi@users.sourceforge.net>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -173,7 +173,7 @@ version (FILE* stream, const char* progname)
 	fprintf (stream,
 		 "%s (" PACKAGE ") " VERSION "\n", progname);
 	fprintf (stream, "Copyright (C) 2016 Fernando Rodriguez\n");
-	fprintf (stream, "Copyright (C) 2005 Rémi Turboult\n");
+	fprintf (stream, "Copyright (C) 2005 RÃ©mi Turboult\n");
 	fprintf (stream, "Compiled against: ");
 
 	FuseFS_PrintVersionString(stream);

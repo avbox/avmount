@@ -4,7 +4,7 @@
  * vfs : virtual file system implementation for djmount 
  * This file is part of djmount.
  *
- * (C) Copyright 2005-2006 Rémi Turboult <r3mi@users.sourceforge.net>
+ * (C) Copyright 2005-2006 RÃ©mi Turboult <r3mi@users.sourceforge.net>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by

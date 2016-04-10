@@ -6,7 +6,7 @@
 # Process this file with autoconf to produce a configure script.
 #
 # (C) Copyright 2016 Fernando Rodriguez
-# (C) Copyright 2005 Rémi Turboult <r3mi@users.sourceforge.net>
+# (C) Copyright 2005 RÃ©mi Turboult <r3mi@users.sourceforge.net>
 #
 
 AC_PREREQ(2.59)
@@ -21,7 +21,7 @@ AM_INIT_AUTOMAKE([1.9 -Wall std-options gnu])
 
 AC_CONFIG_HEADERS(config.h)
 
-AC_COPYRIGHT([Copyright (C) 2005 Rémi Turboult])
+AC_COPYRIGHT([Copyright (C) 2005 RÃ©mi Turboult])
 AC_REVISION([$Revision: 266 $])
 
 #

@@ -4,7 +4,7 @@
  * This file is part of avmount.
  *
  * (C) Copyright 2016 Fernando Rodriguez
- * (C) Copyright 2005 Rémi Turboult <r3mi@users.sourceforge.net>
+ * (C) Copyright 2005 RÃ©mi Turboult <r3mi@users.sourceforge.net>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by

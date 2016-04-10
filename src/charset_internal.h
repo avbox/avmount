@@ -9,7 +9,7 @@
  * ( http://chaos.allsiemens.com/siefs/ )
  * (C) Dmitry Zakharov aka ChaoS <dmitry-z@mail.ru>
  *
- * Modified for djmount (C) 2005, Rémi Turboult <r3mi@users.sourceforge.net>
+ * Modified for djmount (C) 2005, RÃ©mi Turboult <r3mi@users.sourceforge.net>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by

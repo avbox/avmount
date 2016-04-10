@@ -4,7 +4,7 @@
 # Test Device object.
 # This file is part of djmount.
 # 
-# (C) Copyright 2005 Rémi Turboult <r3mi@users.sourceforge.net>
+# (C) Copyright 2005 RÃ©mi Turboult <r3mi@users.sourceforge.net>
 # 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -358,13 +358,13 @@ xml='<?xml version="1.0"?>
     <dlna:X_DLNADOC xmlns:dlna="urn:schemas-dlna-org:device-1-0">DMS-1.50</dlna:X_DLNADOC><dlna:X_DLNACAP xmlns:dlna="urn:schema-dlna-org:device-1-0">av-upload,image-upload,audio-upload</dlna:X_DLNACAP>
     <deviceType>urn:schemas-upnp-org:device:MediaServer:1</deviceType>
     <UDN>uuid:89665984-7466-0011-2f58-320d2195</UDN>
-    <friendlyName>Rémi</friendlyName>
-    <manufacturer>RémiVision GmbH</manufacturer>
+    <friendlyName>RÃ©mi</friendlyName>
+    <manufacturer>RÃ©miVision GmbH</manufacturer>
     <manufacturerURL>http://djmount.sf.net</manufacturerURL>
-    <modelName>RémiVision Media Server</modelName>
+    <modelName>RÃ©miVision Media Server</modelName>
     <modelNumber>103</modelNumber>
     <modelURL>http://djmount.sf.net/test</modelURL>
-    <modelDescription>the RémiVision Media Server</modelDescription>
+    <modelDescription>the RÃ©miVision Media Server</modelDescription>
     <serialNumber></serialNumber><UPC></UPC>
     <presentationURL>configpage/index.htm</presentationURL>
     <serviceList>
