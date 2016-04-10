@@ -52,10 +52,12 @@ type;
 
 #define LIST_INSERT(iitem, iprev, inext) \
 { \
-	((struct __listhead*)(inext))->prev = (struct __listhead*)(iitem); \
+	struct __listhead* __prev = (struct __listhead*) iprev; \
+	struct __listhead* __next = (struct __listhead*) inext; \
+	__next->prev = (struct __listhead*)(iitem); \
 	((struct __listhead*)(iitem))->next = (struct __listhead*)(inext); \
 	((struct __listhead*)(iitem))->prev = (struct __listhead*)(iprev); \
-	((struct __listhead*)(iprev))->next = (struct __listhead*)(iitem); \
+	__prev->next = (struct __listhead*)(iitem); \
 }
 
 #define LIST_ADD(list, item) \
