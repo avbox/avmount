@@ -49,12 +49,10 @@
 // Some reasonable number for number of vararg parameters to SendAction
 #define MAX_VA_PARAMS	64
 
-typedef struct _VariableNode
-{
-	LIST_DECLARE(__head);
+LISTABLE_TYPE(VariableNode,
 	StringPair *item;
-}
-VariableNode;
+);
+
 
 /******************************************************************************
  * Service_SubscribeEventURL

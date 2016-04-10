@@ -69,12 +69,10 @@ struct _Device {
 	LIST_DECLARE(services);
 };
 
-typedef struct _ServiceNode {
-	LIST_DECLARE(head);
-	void *item;
-}
-ServiceNode;
 
+LISTABLE_TYPE(ServiceNode,
+	void *item;
+);
 
 
 /*****************************************************************************

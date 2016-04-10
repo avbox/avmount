@@ -54,9 +54,7 @@
 /*
  * Structure used to represent a network interface
  */
-struct iface_entry
-{
-	LIST_DECLARE(__head);
+LISTABLE_TYPE(iface_t,
 	char *name;
 	int keep;
 	int eventsfd;
@@ -67,7 +65,7 @@ struct iface_entry
 	pthread_mutex_t mutex;
 	pthread_mutex_t event_lock;
 	UpnpClient_Handle handle;
-};
+);
 
 typedef enum
 {
@@ -78,7 +76,7 @@ typedef enum
 	CMD_TALLOC_REPORT,
 	CMD_TALLOC_REPORT_FULL,
 #endif
-	CMD_UPNP_EXIT
+	CMD_EXIT
 }
 command_t;
 
@@ -256,7 +254,7 @@ static int
 EventHandlerCallback (Upnp_EventType event_type,
 	void* event, void* cookie)
 {
-	struct iface_entry *iface = (struct iface_entry*) cookie;
+	iface_t *iface = (iface_t*) cookie;
 
 	pthread_mutex_lock(&iface->event_lock);
 
@@ -314,7 +312,7 @@ EventHandlerCallback (Upnp_EventType event_type,
  * This runs the UPnP client on a child process
  */
 static void
-ClientManager_ClientLoop(struct iface_entry *iface, int eventsfd, int infd, int outfd)
+ClientManager_ClientLoop(iface_t *iface, int eventsfd, int infd, int outfd)
 {
 	int rc;
 	command_t cmd;
@@ -463,7 +461,7 @@ ClientManager_ClientLoop(struct iface_entry *iface, int eventsfd, int infd, int 
 				break;
 			}
 #endif
-			case CMD_UPNP_EXIT:
+			case CMD_EXIT:
 			{
 				Log_Printf(LOG_DEBUG, "Client[%i]: Exit command received",
 					getpid());
@@ -497,7 +495,7 @@ CLIENT_EXIT:
  * sent by the client process.
  */
 static void
-ClientManager_ProxyLoop(struct iface_entry *iface, int eventsfd)
+ClientManager_ProxyLoop(iface_t *iface, int eventsfd)
 {
 	ssize_t ret;
 	Upnp_EventType event_type;
@@ -580,7 +578,7 @@ ClientManager_ProxyLoop(struct iface_entry *iface, int eventsfd)
 static void*
 ClientManager_ProxyThread(void *data)
 {
-	struct iface_entry *iface = (struct iface_entry*) data;
+	iface_t *iface = (iface_t*) data;
 
 	pid_t pid;
 	int eventsfd[2];	/* used to forward events to main process */
@@ -678,7 +676,7 @@ ClientManager_ProxyThread(void *data)
  * ClientManager_RunClient() -- Runs a client on interface
  */
 static void
-ClientManager_RunClient(struct iface_entry *iface)
+ClientManager_RunClient(iface_t *iface)
 {
 	if (pthread_mutex_init(&iface->event_lock, NULL) != 0) {
 		Log_Printf(LOG_ERROR, "ClientManager: Mutex initialization failed!");
@@ -704,11 +702,11 @@ ClientManager_RunClient(struct iface_entry *iface)
 static int
 ClientManager_AddInterface(char *name)
 {
-	struct iface_entry *iface;
+	iface_t *iface;
 
 	Log_Printf(LOG_INFO, "ClientManager: Adding interface: %s", name);
 
-	iface = talloc_zero(context, struct iface_entry);
+	iface = talloc_zero(context, iface_t);
 	if (iface == NULL) {
 		Log_Printf(LOG_ERROR, "ClientManager_AddInterface() -- Out of memory");
 		return -1;
@@ -740,7 +738,7 @@ ClientManager_AddInterface(char *name)
  * the list and shuts down it's child process.
  */
 static void
-ClientManager_RemoveInterface(struct iface_entry *entry)
+ClientManager_RemoveInterface(iface_t *entry)
 {
 	Log_Printf(LOG_INFO, "ClientManager: Removing interface: %s",
 		entry->name);
@@ -748,7 +746,7 @@ ClientManager_RemoveInterface(struct iface_entry *entry)
 	pthread_mutex_lock(&entry->mutex);
 
 	if (entry->pid != -1) {
-		command_t cmd = CMD_UPNP_EXIT;
+		command_t cmd = CMD_EXIT;
 		PIPE_WRITE_VALUE(entry->infd, cmd);
 		pthread_join(entry->thread, NULL);
 	}
@@ -763,14 +761,14 @@ ClientManager_RemoveInterface(struct iface_entry *entry)
  * ClientManager_FindInterface() -- Finds an interface
  * entry on the list by it's name
  */
-static struct iface_entry*
+static iface_t*
 ClientManager_FindInterface(const char *name, int locked)
 {
-	struct iface_entry *ent;
+	iface_t *ent;
 	if (!locked) {
 		pthread_mutex_lock(&list_lock);
 	}
-	LIST_FOREACH(struct iface_entry*, ent, &ifaces) {
+	LIST_FOREACH(iface_t*, ent, &ifaces) {
 		if (!strcmp(name, ent->name)) {
 			if (!locked) {
 				pthread_mutex_unlock(&list_lock);
@@ -791,9 +789,9 @@ ClientManager_FindInterface(const char *name, int locked)
 static void
 ClientManager_CleanupInit()
 {
-	struct iface_entry *ent;
+	iface_t *ent;
 	pthread_mutex_lock(&list_lock);
-	LIST_FOREACH(struct iface_entry*, ent, &ifaces) {
+	LIST_FOREACH(iface_t*, ent, &ifaces) {
 		ent->keep = 0;
 	}
 	pthread_mutex_unlock(&list_lock);
@@ -806,9 +804,9 @@ ClientManager_CleanupInit()
 static void
 ClientManager_Cleanup()
 {
-	struct iface_entry *ent;
+	iface_t *ent;
 	pthread_mutex_lock(&list_lock);
-	LIST_FOREACH_SAFE(struct iface_entry*, ent, &ifaces, {
+	LIST_FOREACH_SAFE(iface_t*, ent, &ifaces, {
 		if (!ent->keep) {
 			ClientManager_RemoveInterface(ent);
 		}
@@ -823,9 +821,9 @@ ClientManager_Cleanup()
 static void
 ClientManager_CheckClients()
 {
-	struct iface_entry *ent;
+	iface_t *ent;
 	pthread_mutex_lock(&list_lock);
-	LIST_FOREACH(struct iface_entry*, ent, &ifaces) {
+	LIST_FOREACH(iface_t*, ent, &ifaces) {
 		if (ent->pid == -1) {
 			Log_Printf(LOG_ERROR, "ClientManager: "
 				"Client for interface %s died. Restarting",
@@ -859,7 +857,7 @@ ClientManager_MonitorInterfaces(void *arg)
 		while ((dp = readdir(dir)) != NULL) {
 			int fd;
 			char name[PATH_MAX];
-			struct iface_entry *ent;
+			iface_t *ent;
 
 			/* ignore loopback interface and dot files */
 			if (dp->d_name[0] == '.' || !strcmp("lo", dp->d_name)) {
@@ -989,7 +987,7 @@ ClientManager_UpnpSubscribe(const char *iface_name,
 {
 	int ret;
 	const command_t cmd = CMD_UPNP_SUBSCRIBE;
-	struct iface_entry *iface;
+	iface_t *iface;
 	FIND_INTERFACE(iface, iface_name, 0, return -1);
 	LOCK_INTERFACE(iface, iface_name, 0, return -1);
 	PIPE_WRITE_VALUE(iface->infd, cmd);
@@ -1013,7 +1011,7 @@ ClientManager_UpnpUnSubscribe(const char *iface_name,
 {
 	int ret;
 	const command_t cmd = CMD_UPNP_UNSUBSCRIBE;
-	struct iface_entry *iface;
+	iface_t *iface;
 
 	/*
 	 * this function may be called by the destructors
@@ -1050,7 +1048,7 @@ ClientManager_UpnpSendAction(const char *iface_name,
 {
 	int ret;
 	const command_t cmd = CMD_UPNP_SEND_ACTION;
-	struct iface_entry *iface;
+	iface_t *iface;
 	IXML_Document *doc = NULL;
 	FIND_INTERFACE(iface, iface_name, 0, return -1);
 	LOCK_INTERFACE(iface, iface_name, 0, return -1);
@@ -1074,11 +1072,11 @@ ClientManager_UpnpSendAction(const char *iface_name,
 void
 ClientManager_Talloc_Report(FILE *file)
 {
-	struct iface_entry *iface;
+	iface_t *iface;
 	char *str;
 	const command_t cmd = CMD_TALLOC_REPORT;
 	pthread_mutex_lock(&list_lock);
-	LIST_FOREACH(struct iface_entry*, iface, &ifaces) {
+	LIST_FOREACH(iface_t*, iface, &ifaces) {
 		LOCK_INTERFACE(iface, iface->name, 1, return);
 		PIPE_WRITE_VALUE(iface->infd, cmd);
 		PIPE_READ_STRING(iface->outfd, str);
@@ -1102,11 +1100,11 @@ ClientManager_Talloc_Report(FILE *file)
 void
 ClientManager_Talloc_Report_Full(FILE *file)
 {
-	struct iface_entry *iface;
+	iface_t *iface;
 	char *str;
 	const command_t cmd = CMD_TALLOC_REPORT_FULL;
 	pthread_mutex_lock(&list_lock);
-	LIST_FOREACH(struct iface_entry*, iface, &ifaces) {
+	LIST_FOREACH(iface_t*, iface, &ifaces) {
 		LOCK_INTERFACE(iface, iface->name, 1, return);
 		PIPE_WRITE_VALUE(iface->infd, cmd);
 		PIPE_READ_STRING(iface->outfd, str);

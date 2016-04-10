@@ -1,3 +1,25 @@
+/*
+ * linkedlist.h : Lightweight linked list implementation
+ * This file is part of avmount.
+ *
+ * (C) Copyright 2016 Fernando Rodriguez
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+ */
+
+
 #ifndef __LINKEDLIST_H__
 #define __LINKEDLIST_H__
 
@@ -10,11 +32,17 @@ struct __listhead
 #define LIST_DECLARE(var) \
 	struct __listhead var
 
+#define LISTABLE_TYPE(type, fields) \
+typedef struct __ ## type \
+{ \
+	LIST_DECLARE(__ ## type ## _listhead); \
+	fields \
+} \
+type;
+
+
 #define LIST_DECLARE_STATIC(var) \
 	static struct __listhead var
-
-#define LIST_HEAD() \
-	LIST_DECLARE(__head)
 
 #define LIST_INIT(list) \
 	((struct __listhead*)(list))->next = list; \

@@ -53,11 +53,8 @@
 #define LIKELY(x)		(__builtin_expect(!!(x), 1))
 #define UNLIKELY(x)		(__builtin_expect(!!(x), 0))
 
-/* cURL file handle */
-struct _Stream
-{
-	LIST_HEAD();
-
+/* Stream handle */
+LISTABLE_TYPE(Stream,
 	CURL*           handle;
 	CURLM*          multi_handle;
 	CURLcode        result;
@@ -87,9 +84,7 @@ struct _Stream
 	int             ra_abort;
 	int             ra_growbuf;
 	const char*     ra_bufend;
-};
-
-typedef struct _Stream Stream;
+);
 
 static pthread_mutex_t streams_lock = PTHREAD_MUTEX_INITIALIZER;
 LIST_DECLARE_STATIC(streams);

@@ -74,13 +74,11 @@ static ithread_mutex_t DeviceListMutex;
 /*
  * The global device list
  */
-struct _DeviceNode {
-	LIST_DECLARE(__head);
+LISTABLE_TYPE(DeviceNode,
 	char*    deviceId; // as reported by the discovery callback
 	Device*  d;
 	int      expires;
-};
-typedef struct _DeviceNode DeviceNode;
+);
 
 
 //
@@ -345,8 +343,6 @@ AddDevice (const char *iface, const char* deviceId,
 			Log_Printf(LOG_ERROR, "Could not allocate device node");
 			return;
 		}
-		// Initialize fields to empty values
-		*devnode = (struct _DeviceNode) { }; 
 
 		devnode->d = Device_Create (devnode, client_handle,
 					    descLocation, deviceId,
