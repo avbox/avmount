@@ -577,7 +577,6 @@ FuseFS_PrintVersionString(FILE *f)
 void
 FuseFS_Destroy(int teardown)
 {
-	Log_Print(LOG_DEBUG, "Fuse_Destroy()");
 #if USE_FUSE_SETUP
 	if (fuse != NULL) {
 		if (teardown) {

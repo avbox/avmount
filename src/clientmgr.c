@@ -314,11 +314,12 @@ EventHandlerCallback (Upnp_EventType event_type,
 static void
 ClientManager_ClientLoop(iface_t *iface, int eventsfd, int infd, int outfd)
 {
-	int rc;
+	int rc = 0;
 	command_t cmd;
 
 	/* ignore SIGTERM */
-	/* (void) signal(SIGTERM, SIG_IGN); */
+	(void) signal(SIGTERM, SIG_IGN);
+	(void) signal(SIGINT, SIG_IGN);
 
 	iface->eventsfd = eventsfd;
 
@@ -330,14 +331,13 @@ ClientManager_ClientLoop(iface_t *iface, int eventsfd, int infd, int outfd)
 	if (UPNP_E_SUCCESS != rc) {
 		Log_Printf(LOG_ERROR, "Client[%i]: UpnpInit2() Error: %d",
 			getpid(), rc);
-		UpnpFinish();
 		if (rc == UPNP_E_SOCKET_ERROR) {
 			Log_Printf(LOG_ERROR, "Client[%i]: Check network configuration, "
 				"in particular that a multicast route "
 				"is set for the default network "
 				"interface", getpid());
 		}
-		exit(1);
+		goto CLIENT_EXIT;
 	}
 
 	/* register UPnP client */
@@ -346,8 +346,7 @@ ClientManager_ClientLoop(iface_t *iface, int eventsfd, int infd, int outfd)
 	if (rc != UPNP_E_SUCCESS) {
 		Log_Printf(LOG_ERROR, "Client[%i]: Error registering CP: %d",
 			getpid(), rc);
-		UpnpFinish();
-		exit(1);
+		goto CLIENT_EXIT;
 	}
 
 	Log_Printf(LOG_INFO, "Client[%i]: UPnP Initialized (if=%s ip=%s port=%d handle=%lx)",
@@ -485,9 +484,21 @@ ClientManager_ClientLoop(iface_t *iface, int eventsfd, int infd, int outfd)
 	}
 
 CLIENT_EXIT:
-	/* Unregister client and shutdown UPnP SDK */
-	UpnpUnRegisterClient(iface->handle);
+	/* re-enable SIGTERM */
+	(void) signal(SIGTERM, SIG_DFL);
+
+	/* Unregister client */
+	if (rc == UPNP_E_SUCCESS) {
+		UpnpUnRegisterClient(iface->handle);
+	}
+
+	/* Shutdown UPnP SDK */
 	UpnpFinish();
+
+	/* If there was an error exit with failure status */
+	if (rc != UPNP_E_SUCCESS) {
+		exit(1);
+	}
 }
 
 /**
@@ -931,11 +942,10 @@ ClientManager_MonitorInterfaces(void *arg)
 }
 
 /**
- * ClientManager_Start() -- Starts the network monitoring
- * thread
+ * ClientManager_Init() -- Initialize the client manager
  */
 void
-ClientManager_Start()
+ClientManager_Init()
 {
 
 	LIST_INIT(&ifaces);
@@ -951,9 +961,6 @@ ClientManager_Start()
 #endif
 
 	abort_mon = 0;
-
-	DeviceList_Init();
-
 	if (pthread_create(&monthread, NULL, ClientManager_MonitorInterfaces, NULL) != 0) {
 		Log_Printf(LOG_ERROR, "ClientManager: pthread_create() failed");
 		abort();
@@ -961,17 +968,14 @@ ClientManager_Start()
 }
 
 /**
- * ClientManager_Stop() -- Stops the network monitoring thread
+ * ClientManager_Destroy() -- Shutdown the client manager
  */
 void
-ClientManager_Stop()
+ClientManager_Destroy()
 {
 	/* wait for ClientManager to exit */
 	abort_mon = 1;
 	pthread_join(monthread, NULL);
-
-	/* free device list */
-	DeviceList_Destroy();
 
 	/* free stuff */
 	talloc_free(context);

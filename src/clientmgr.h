@@ -27,10 +27,10 @@
 #endif
 
 void
-ClientManager_Start();
+ClientManager_Init();
 
 void
-ClientManager_Stop();
+ClientManager_Destroy();
 
 int
 ClientManager_UpnpSubscribe(const char *iface_name,

@@ -375,14 +375,19 @@ main (int argc, char *argv[])
 	}
 
 	/*
+	 * Initialize the device list
+	 */
+	DeviceList_Init();
+
+	/*
 	 * Initialie stream engine
 	 */
 	Stream_Init();
 
 	/*
-	 * Initialise UPnP Control point and starts FUSE file system
+	 * Initialize client manager
 	 */
-	ClientManager_Start();
+	ClientManager_Init();
 
 	/*
 	 * Initialize and run fuse fs
@@ -391,13 +396,17 @@ main (int argc, char *argv[])
 		Log_Printf (LOG_ERROR, "Error in FUSE main loop = %d", rc);
 	}
 
+	/* ignore SIGINT during shutdown */
+	(void) signal(SIGINT, SIG_IGN);
+
 	/*
 	 * Cleanup and exit
 	 */
 	Log_Print(LOG_DEBUG, "Shutting down ...");
 	FuseFS_Destroy(1);
 	Stream_Destroy();
-	ClientManager_Stop();
+	DeviceList_Destroy();
+	ClientManager_Destroy();
 	Charset_Finish();
 	Log_Finish();
 	return rc;
