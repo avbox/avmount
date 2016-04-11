@@ -6,7 +6,7 @@
 # Copyright (C) 2005 Rémi Turboult <r3mi@users.sourceforge.net>
 #
 
-ACLOCAL_AMFLAGS = -I m4 -I gl/m4
+ACLOCAL_AMFLAGS = -I gl/m4
 
 SUBDIRS 	= gl
 SUBDIRS 	+= src

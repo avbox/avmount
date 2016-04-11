@@ -9,10 +9,9 @@
 # (C) Copyright 2005 Rémi Turboult <r3mi@users.sourceforge.net>
 #
 
-AC_PREREQ(2.59)
-AC_INIT(avmount, 0.8, https://github.com/fernando-rodriguez/avmount)
+AC_PREREQ([2.69])
+AC_INIT([avmount],[0.8],[https://github.com/fernando-rodriguez/avmount])
 
-AC_CONFIG_MACRO_DIR(m4)
 AC_CONFIG_MACRO_DIR(gl/m4)
 
 AC_CONFIG_SRCDIR(src/djfs.c)
@@ -53,8 +52,7 @@ fi
 AC_PROG_CC
 gl_EARLY
 
-AC_DISABLE_SHARED
-AC_PROG_LIBTOOL
+LT_INIT([disable-shared])
 
 AC_PROG_INSTALL
 AC_PROG_MAKE_SET
@@ -132,11 +130,16 @@ gl_INIT
 # talloc 
 # ------
 #
+PKG_CHECK_MODULES(TALLOC, [talloc >= 2.1.5], ,
+	AC_MSG_ERROR('Unable to find libfuse. Please make sure library and header files are installed.'))
+CFLAGS="$CFLAGS $TALLOC_CFLAGS"
+LDFLAGS="$LDFLAGS $TALLOC_LIBS"
 
-	# Find the library. This macro handles the TALLOC_CFLAGS and _LIBS,
-	# the --with-talloc-prefix arg, and pkg-config (if any).
-	RT_PACKAGE_FIND([talloc], [], [-ltalloc], [talloc >= 4.0], 
-	[
+if false; then
+AC_MSG_CHECKING([whether talloc works])
+AC_LANG([C])
+AC_LINK_IFELSE([
+	AC_LANG_SOURCE([[
 /* those include are currently missing from "talloc.h" */
 #include <stdio.h>
 #include <stdlib.h>
@@ -146,27 +149,24 @@ gl_INIT
 #  include <varargs.h>
 #endif
 #include "talloc.h"
-	], 
-	[
-		/* test for recent talloc functions */
-		(void) talloc_get_size (talloc_autofree_context());
-	],
-	[],[AC_MSG_ERROR([
-** Can't find external talloc library (or it is too old). 
-** Try to configure again --without-external-talloc (this is the default) to
-** use the internal bundled library. 
-** Or $TALLOC_MSG_ERRORS
-	])])
-AM_CONDITIONAL(INTERNAL_TALLOC, false)
 
+int main()
+{
+	/* test for recent talloc functions */
+	(void) talloc_get_size (talloc_autofree_context());
+	return 0;
+}
+	]])],
+	[AC_MSG_RESULT([yes])],
+	[AC_MSG_ERROR([no])])
+fi
 
 #
 # readline (option)
 # -----------------
 # Checks for readline and history compatible libraries
 #
-
-VL_LIB_READLINE
+AX_LIB_READLINE
 
 
 #
@@ -189,7 +189,7 @@ AM_CONDITIONAL(WANT_ICONV,
 # POSIX Threads
 # -------------
 #
-ACX_PTHREAD([],[AC_MSG_ERROR([POSIX threads are required to build this program])])
+AX_PTHREAD([],[AC_MSG_ERROR([POSIX threads are required to build this program])])
 
 # We are only building threads programs so we add the pthread flags directly
 # to the default compilation variables. This will also allow the tests below
@@ -204,13 +204,20 @@ CC="$PTHREAD_CC"
 # FUSE 
 # ----
 #
+PKG_CHECK_MODULES(FUSE, [fuse >= 2.2], ,
+	AC_MSG_ERROR('Unable to find libfuse. Please make sure library and header files are installed.'))
+CFLAGS="$CFLAGS $FUSE_CFLAGS -DFUSE_USE_VERSION=22"
+LDFLAGS="$LDFLAGS $FUSE_LIBS"
 
-# Find the library. This macro handles the FUSE_CFLAGS and FUSE_LIBS,
-# the --with-fuse-prefix arg, and pkg-config (if any).
-RT_PACKAGE_FIND([fuse], [-D_FILE_OFFSET_BITS=64], [-lfuse], [fuse >= 2.2], 
-	[ 
-/* must request latest API (25) else don't work when using FUSE 2.5 */
-#define FUSE_USE_VERSION 25 
+if false; then
+AC_MSG_CHECKING([whether libfuse works])
+AC_LANG([C])
+AC_LINK_IFELSE([
+	AC_LANG_SOURCE([[
+/* must request latest API (25) else dont work when using FUSE 2.5 */
+#ifndef FUSE_USE_VERSION
+#define FUSE_USE_VERSION 25
+#endif
 #include <fuse.h> 
 /* Missing in earlier FUSE versions e.g. 2.2 */
 #ifndef FUSE_VERSION
@@ -219,47 +226,55 @@ RT_PACKAGE_FIND([fuse], [-D_FILE_OFFSET_BITS=64], [-lfuse], [fuse >= 2.2],
 #if FUSE_VERSION < 22
 #	error FUSE version is too old
 #endif
-	],
-	[ fuse_destroy(0) ],
-	[],[AC_MSG_ERROR([
-** Can't find fuse library (or it is too old). 
-** $FUSE_MSG_ERRORS
-	])])
+int main() { fuse_destroy(0); return 0; }
+	]])],
+	[AC_MSG_RESULT([yes])],
+	[AC_MSG_ERROR([no])])
+fi
 
-FUSE_CFLAGS="$FUSE_CFLAGS -DFUSE_USE_VERSION=22"
+#
+# libupnp
+#
+PKG_CHECK_MODULES(LIBUPNP, [libupnp >= 1.3.1], ,
+	AC_MSG_ERROR('Unable to find libfuse. Please make sure library and header files are installed.'))
+CFLAGS="$CFLAGS $LIBUPNP_CFLAGS"
+LDFLAGS="$LDFLAGS $LIBUPNP_LIBS"
 
-	# Find the library. This macro handles the LIBUPNP_CFLAGS and _LIBS,
-	# the --with-libupnp-prefix arg, and pkg-config (if any).
-	RT_PACKAGE_FIND([libupnp], [], [-lupnp -lthreadutil -lixml], 
-			[libupnp >= 1.3.1], 
-	[
-#	include <upnp/ixml.h>
-#	include <upnp/upnp.h>
-#	include <upnp/upnptools.h>
+if false; then
+AC_MSG_CHECKING([whether libupnp works])
+AC_LANG([C])
+AC_LINK_IFELSE([
+	AC_LANG_SOURCE([[
+#include <upnp/ixml.h>
+#include <upnp/upnp.h>
+#include <upnp/upnptools.h>
 #if (!defined UPNP_VERSION) || (UPNP_VERSION < 10301)
 #	error libupnp version is too old
 #endif
-	],
-	[
-		UpnpResolveURL (NULL, NULL, NULL);
-		/* test for functions added after libupnp-1.2.1a */
-		ixmlRelaxParser (0);
-		UpnpSetMaxContentLength (0);
-	],
-	[],[AC_MSG_ERROR([
-** Can't find external libupnp library (or it is too old). 
-** Try to configure again --without-external-libupnp (this is the default) to
-** use the internal bundled library. 
-** Or $LIBUPNP_MSG_ERRORS
-	])])
+int main()
+{
+	UpnpResolveURL (NULL, NULL, NULL);
+	/* test for functions added after libupnp-1.2.1a */
+	ixmlRelaxParser (0);
+	UpnpSetMaxContentLength (0);
+	return 0;
+}
+	]])],
+	[AC_MSG_RESULT([yes])],
+	[AC_MSG_ERROR([no])])
+fi
 
-AM_CONDITIONAL(INTERNAL_LIBUPNP, false)
-
+#
+# libcurl
+#
 AX_LIB_CURL([7.45.0],,
 	[AC_MSG_ERROR([Your system lacks libcurl >= 7.45.0])])
 LDFLAGS="$LDFLAGS -lcurl"
 AC_DEFINE([USE_CURL], 1, [Define to 1 to use libcurl])
 
+#
+# malloc_trim()
+#
 AC_CHECK_FUNCS([malloc_trim])
 
 

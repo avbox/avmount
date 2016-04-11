@@ -25,43 +25,4 @@ CLEANFILES =
 DISTCLEANFILES =
 MAINTAINERCLEANFILES =
 
-## begin gnulib module exit
-
-libgnu_la_SOURCES += exit.h
-
-## end   gnulib module exit
-
-## begin gnulib module gettext-h
-
-libgnu_la_SOURCES += gettext.h
-
-## end   gnulib module gettext-h
-
-## begin gnulib module minmax
-
-libgnu_la_SOURCES += minmax.h
-
-## end   gnulib module minmax
-
-## begin gnulib module stdbool
-
-BUILT_SOURCES += $(STDBOOL_H)
-EXTRA_DIST += stdbool_.h
-
-# We need the following in order to create <stdbool.h> when the system
-# doesn't have one that works.
-stdbool.h: stdbool_.h
-	sed -e 's/@''HAVE__BOOL''@/$(HAVE__BOOL)/g' < $(srcdir)/stdbool_.h > $@-t
-	mv $@-t $@
-MOSTLYCLEANFILES += stdbool.h stdbool.h-t
-
-## end   gnulib module stdbool
-
-## begin gnulib module xalloc-die
-
-libgnu_la_SOURCES += xalloc-die.c
-
-## end   gnulib module xalloc-die
-
-
 # Makefile.am ends here

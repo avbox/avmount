@@ -20,16 +20,6 @@
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #
 
-if INTERNAL_LIBUPNP
-
-    # Local install of UPnP headers, to find <upnp/*.h> even when
-    # they are not installed
-    UPNP_TMPINC		= @abs_builddir@/_upnp_temp_install
-
-    LIBUPNP_CFLAGS	+= -I$(UPNP_TMPINC)
-
-endif
-
 AM_CFLAGS		= -I$(top_srcdir)/gl \
 			  $(TALLOC_CFLAGS) $(LIBUPNP_CFLAGS) $(FUSE_CFLAGS) 
 

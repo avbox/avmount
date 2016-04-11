@@ -8,7 +8,4 @@ AC_DEFUN([gl_HASH],
 [
   AC_LIBSOURCES([hash.c, hash.h])
   AC_LIBOBJ([hash])
-
-  dnl Prerequisites of lib/hash.c.
-  AC_REQUIRE([AM_STDBOOL_H])
 ])
