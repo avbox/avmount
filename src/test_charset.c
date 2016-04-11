@@ -94,7 +94,7 @@ main (int argc, char** argv)
 			if (cmdline[cmdlen-1] == '\n') 
 				cmdline[--cmdlen] = '\0';
 
-			printf ("len = %d\n", cmdlen);
+			printf ("len = %zd\n", cmdlen);
 
 			// Create a working context for temporary allocations
 			void* tmp_ctx = talloc_new (NULL);
@@ -107,7 +107,7 @@ main (int argc, char** argv)
 				 buffer1, sizeof(buffer1), tmp_ctx);
 			if (result1) {
 				dump (result1);
-				printf ("len = %d\n", strlen(result1));
+				printf ("len = %zd\n", strlen(result1));
 				if (result1 == buffer1)
 					printf ("allocated on stack\n");
 				else
@@ -133,7 +133,7 @@ main (int argc, char** argv)
 			if (result2) {
 				printf ("str = '%s'\n", result2);
 				dump (result2);
-				printf ("len = %d\n", strlen(result2));
+				printf ("len = %zd\n", strlen(result2));
 				if (result2 == buffer2)
 					printf ("allocated on stack\n");
 				else

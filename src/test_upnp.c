@@ -31,10 +31,6 @@ main()
 	return 0;
 }
 
-void FuseFS_Destroy()
-{
-}
-
 #else
 #include <config.h>
 

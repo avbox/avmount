@@ -65,7 +65,7 @@ diff -u -b -B - <(echo "$res" |egrep -v '(Discover|talloc)') <<EOF || fatal
   |
   +- UDN            = uuid:89665984-7466-0011-2f58-320d2195
   +- DeviceType     = urn:schemas-upnp-org:device:MediaServer:1
-  +- DescDocURL     = http://test.url
+  +- DescDocURL     = http://10.10.0.177
   +- FriendlyName   = Remi
   +- PresURL        = http://192.168.28.1:9000/configpage/index.htm
   |
@@ -112,7 +112,7 @@ diff -u -b -B - <(echo "$res" |egrep -v '(Discover|talloc)') <<EOF || fatal
   |
   +- UDN            = uuid:89665984-7466-0011-2f58-320d2195
   +- DeviceType     = urn:schemas-upnp-org:device:MediaServer:1
-  +- DescDocURL     = http://test.url
+  +- DescDocURL     = http://10.10.0.177
   +- FriendlyName   = Remi
   +- PresURL        = http://192.168.28.1:9000/configpage/index.htm
   |
@@ -161,9 +161,9 @@ diff -u -b -B - <(echo "$res" |egrep -v '(Discover|talloc)') <<EOF || fatal
   |
   +- UDN            = uuid:89665984-7466-0011-2f58-320d2195
   +- DeviceType     = urn:schemas-upnp-org:device:MediaServer:1
-  +- DescDocURL     = http://test.url
+  +- DescDocURL     = http://10.10.0.177
   +- FriendlyName   = Remi
-  +- PresURL        = http://test.url/configpage/index.htm
+  +- PresURL        = http://10.10.0.177/configpage/index.htm
   |
   +- Service
   |   |
@@ -171,8 +171,8 @@ diff -u -b -B - <(echo "$res" |egrep -v '(Discover|talloc)') <<EOF || fatal
   |   +- Object Name     = Service
   |   +- ServiceType     = urn:schemas-upnp-org:service:ConnectionManager:1
   |   +- ServiceId       = urn:upnp-org:serviceId:ConnectionManager
-  |   +- EventURL        = http://test.url/ConnectionManager/Event
-  |   +- ControlURL      = http://test.url/ConnectionManager/Control
+  |   +- EventURL        = http://10.10.0.177/ConnectionManager/Event
+  |   +- ControlURL      = http://10.10.0.177/ConnectionManager/Control
   |   +- ServiceStateTable
   |   +- Last Action     = (null)
   |   +- SID             = (null)
@@ -183,8 +183,8 @@ diff -u -b -B - <(echo "$res" |egrep -v '(Discover|talloc)') <<EOF || fatal
       +- Object Name     = ContentDir
       +- ServiceType     = urn:schemas-upnp-org:service:ContentDirectory:1
       +- ServiceId       = urn:upnp-org:serviceId:ContentDirectory
-      +- EventURL        = http://test.url/ContentDirectory/Event
-      +- ControlURL      = http://test.url/ContentDirectory/Control
+      +- EventURL        = http://10.10.0.177/ContentDirectory/Event
+      +- ControlURL      = http://10.10.0.177/ContentDirectory/Control
       +- ServiceStateTable
       +- Last Action     = (null)
       +- SID             = (null)
@@ -228,7 +228,7 @@ diff -u -b -B - <(echo "$res" |egrep -v '(Discover|talloc)') <<EOF || fatal
   |
   +- UDN            = uuid:89665984-7466-0011-2f58-320d2195
   +- DeviceType     = urn:schemas-upnp-org:device:MediaServer:1
-  +- DescDocURL     = http://test.url
+  +- DescDocURL     = http://10.10.0.177
   +- FriendlyName   = Remi
   +- PresURL        = http://192.168.28.1:9000/configpage/index.htm
 
@@ -273,7 +273,7 @@ diff -u -b -B - <(echo "$res" |egrep -v '(Discover|talloc)') <<EOF || fatal
   |
   +- UDN            = uuid:89665984-7466-0011-2f58-320d2195
   +- DeviceType     = urn:schemas-upnp-org:device:MediaServer:1
-  +- DescDocURL     = http://test.url
+  +- DescDocURL     = http://10.10.0.177
   +- FriendlyName   = Remi
   +- PresURL        = http://192.168.28.1:9000/configpage/index.htm
   |
@@ -379,9 +379,9 @@ diff -u -b -B - <(echo "$res" |egrep -v '(Discover|talloc)') <<EOF || fatal
   |
   +- UDN            = uuid:89665984-7466-0011-2f58-320d2195
   +- DeviceType     = urn:schemas-upnp-org:device:MediaServer:1
-  +- DescDocURL     = http://test.url
-  +- FriendlyName   = R?mi
-  +- PresURL        = http://test.url/configpage/index.htm
+  +- DescDocURL     = http://10.10.0.177
+  +- FriendlyName   = Rémi
+  +- PresURL        = http://10.10.0.177/configpage/index.htm
   |
   +- Service
   |   |
@@ -389,8 +389,8 @@ diff -u -b -B - <(echo "$res" |egrep -v '(Discover|talloc)') <<EOF || fatal
   |   +- Object Name     = Service
   |   +- ServiceType     = urn:schemas-upnp-org:service:ConnectionManager:1
   |   +- ServiceId       = urn:upnp-org:serviceId:ConnectionManager
-  |   +- EventURL        = http://test.url/ConnectionManager/Event
-  |   +- ControlURL      = http://test.url/ConnectionManager/Control
+  |   +- EventURL        = http://10.10.0.177/ConnectionManager/Event
+  |   +- ControlURL      = http://10.10.0.177/ConnectionManager/Control
   |   +- ServiceStateTable
   |   +- Last Action     = (null)
   |   +- SID             = (null)
@@ -401,8 +401,8 @@ diff -u -b -B - <(echo "$res" |egrep -v '(Discover|talloc)') <<EOF || fatal
       +- Object Name     = ContentDir
       +- ServiceType     = urn:schemas-upnp-org:service:ContentDirectory:1
       +- ServiceId       = urn:upnp-org:serviceId:ContentDirectory
-      +- EventURL        = http://test.url/ContentDirectory/Event
-      +- ControlURL      = http://test.url/ContentDirectory/Control
+      +- EventURL        = http://10.10.0.177/ContentDirectory/Event
+      +- ControlURL      = http://10.10.0.177/ContentDirectory/Control
       +- ServiceStateTable
       +- Last Action     = (null)
       +- SID             = (null)
@@ -510,7 +510,7 @@ diff -u -b -B - <(echo "$res" |egrep -v '(Discover|talloc)') <<EOF || fatal
   |
   +- UDN            = uuid:0012-1707-c2e500a80c00
   +- DeviceType     = urn:schemas-upnp-org:device:InternetGatewayDevice:1
-  +- DescDocURL     = http://test.url
+  +- DescDocURL     = http://10.10.0.177
   +- FriendlyName   = My Router
   +- PresURL        = http://192.168.1.1/UPnP.asp
   |
@@ -542,7 +542,7 @@ diff -u -b -B - <(echo "$res" |egrep -v '(Discover|talloc)') <<EOF || fatal
   |
   +- UDN            = uuid:0012-1707-c2e501d00c00
   +- DeviceType     = urn:schemas-upnp-org:device:WANDevice:1
-  +- DescDocURL     = http://test.url
+  +- DescDocURL     = http://10.10.0.177
   +- FriendlyName   = Embedded_1
   +- PresURL        = 
   |
@@ -575,7 +575,7 @@ diff -u -b -B - <(echo "$res" |egrep -v '(Discover|talloc)') <<EOF || fatal
   |
   +- UDN            = uuid:0012-1707-c2e502100c00
   +- DeviceType     = urn:schemas-upnp-org:device:WANConnectionDevice:1
-  +- DescDocURL     = http://test.url
+  +- DescDocURL     = http://10.10.0.177
   +- FriendlyName   = Embedded_1_1
   +- PresURL        = 
   |
@@ -692,7 +692,7 @@ diff -u -b -B - <(echo "$res" |egrep -v '(Discover|talloc)') <<EOF || fatal
   |
   +- UDN            = uuid:0012-1707-c2e500a80c00
   +- DeviceType     = urn:schemas-upnp-org:device:InternetGatewayDevice:1
-  +- DescDocURL     = http://test.url
+  +- DescDocURL     = http://10.10.0.177
   +- FriendlyName   = My Router
   +- PresURL        = http://192.168.1.1/UPnP.asp
 

@@ -44,10 +44,10 @@ bin_PROGRAMS 		= avmount
 noinst_PROGRAMS		= test_upnp
 
 check_PROGRAMS 		= test_cache test_charset test_device test_ptr_array \
-			  test_string test_vfs
+			  test_string test_vfs test_stream
 # auto run some tests
 TESTS			= test_ptr_array test_string test_cache \
-			  test_device.sh test_vfs.sh
+			  test_device.sh test_vfs.sh test_stream
 
 
 COMMON_SRCS 		= log.c object.c service.c \
@@ -55,7 +55,7 @@ COMMON_SRCS 		= log.c object.c service.c \
 			  media_file.c file_buffer.c \
 			  content_dir.c vfs.c djfs.c upnp_util.c \
 			  string_util.c xml_util.c ptr_array.c talloc_util.c \
-			  cache.c clientmgr.c stream.c
+			  cache.c clientmgr.c stream.c fuse_fs.c
 if ENABLE_CHARSET
     COMMON_SRCS 	+= charset.c
 if !WANT_ICONV
@@ -79,7 +79,7 @@ BUILT_SOURCES		= search_help.h
 search_help.h : ../search_help.txt txt2h.pl
 	$(PERL) $(srcdir)/txt2h.pl $< > $@
 
-avmount_SOURCES		= $(COMMON_SRCS) fuse_fs.c main.c
+avmount_SOURCES		= $(COMMON_SRCS) main.c
 
 test_upnp_SOURCES	= $(COMMON_SRCS) test_upnp.c
 test_upnp_LDADD		= $(LDADD) $(READLINE_LIBS)
@@ -96,6 +96,7 @@ test_string_SOURCES	= $(COMMON_SRCS) test_string.c
 
 test_vfs_SOURCES	= $(COMMON_SRCS) test_vfs.c
 
+test_stream_SOURCES	= $(COMMON_SRCS) test_stream.c
 
 CLEANFILES		= IUpnpErrFile.txt IUpnpInfoFile.txt
 

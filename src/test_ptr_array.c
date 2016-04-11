@@ -39,7 +39,7 @@ print_array (const char* name, const PtrArray* array)
 {
 	printf ("\n%s : \n", name);
 	assert (array != NULL);
-	printf (" PtrArray size = %d\n", PtrArray_GetSize (array));
+	printf (" PtrArray size = %zd\n", PtrArray_GetSize (array));
 	int i = 0;
 	const int* ptr = NULL;
 	PTR_ARRAY_FOR_EACH_PTR (array, ptr) {

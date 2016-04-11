@@ -311,7 +311,7 @@ Device_Create (void* parent_context,
 				return NULL;
 			}
 			node->item = serv;
-			LIST_ADD(&dev->services, node);
+			LIST_APPEND(&dev->services, node);
 		}
 	}
 	

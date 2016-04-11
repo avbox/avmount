@@ -287,8 +287,8 @@ UpnpUtil_ResolveURL (void* talloc_context,
 		int rc = UpnpResolveURL (base, rel, resolved);
 		if (rc != UPNP_E_SUCCESS) {
 			Log_Printf (LOG_ERROR, 
-				    "Error generating URL from '%s' + '%s'",
-				    NN(base), NN(rel));
+				    "Error generating URL from '%s' + '%s' (err=%i)",
+				    NN(base), NN(rel), rc);
 			resolved[0] = '\0';
 		}
 	}

@@ -61,8 +61,10 @@ main (int argc, char* argv[])
 	Log_Colorize (true);
 	Log_SetMaxLevel (LOG_ERROR);
 
+#if 0
 	// Manually initialise UPnP logs because UpnpInit() is not called
 	assert (InitLog() == UPNP_E_SUCCESS);
+#endif
 
 	char buffer [10 * 1024];
 	char* const descDocText = fgets (buffer, sizeof (buffer), stdin);
@@ -73,7 +75,7 @@ main (int argc, char* argv[])
 
 	// Test Device creation
 	Device* dev = Device_Create (NULL, (UpnpClient_Handle) -1, 
-				     "http://test.url", argv[1], descDocText);
+				     "http://10.10.0.177", argv[1], descDocText, "");
 	assert (dev != NULL);
 
 	char* s = Device_GetStatusString (dev, dev, true);
