@@ -508,8 +508,9 @@ Stream_ReadAhead(void *f)
 			(unsigned long) file, (size_t) READAHEAD_BUFSZ_MAX / 1024);
 		file->ra_buf = mmap(NULL, READAHEAD_BUFSZ_MAX,
 			PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-		if (file->ra_buf == NULL) {
+		if (file->ra_buf == MAP_FAILED) {
 			Log_Printf(LOG_ERROR, "Stream_ReadAhead() -- malloc() failed");
+			file->ra_buf = NULL;
 			goto THREAD_EXIT;
 		}
 		file->ra_bufend = file->ra_buf + READAHEAD_BUFSZ_START;
