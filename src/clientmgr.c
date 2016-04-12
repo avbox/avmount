@@ -247,6 +247,41 @@ read_or_die(int fd, void *buf, size_t length)
 }
 
 /**
+ * read_or_eof() -- Like read() but it will either successfuly read
+ * the amount requested, return EOF, or crash the program on any other
+ * error condition
+ */
+static int
+read_or_eof(int fd, void *buf, size_t length)
+{
+	ssize_t ret;
+	size_t bytes_read = 0;
+	while ((ret = read(fd, buf + bytes_read, length)) != length) {
+		if (ret == 0) {
+			/* EOF after some bytes read should never happen */
+			if (bytes_read != 0) {
+				Log_Printf(LOG_DEBUG, "read_or_eof(): EOF after %zd bytes read.",
+					bytes_read);
+				abort();
+			}
+			return 0; /* eof */
+		} else if (ret == -1) {
+			if (errno == EINTR) {
+				continue;
+			}
+			Log_Printf(LOG_ERROR, "read_or_die: "
+				"read() returned %zd (errno=%i,length=%zu,bytes_read=%zu)",
+				ret, errno, length, bytes_read);
+			abort();
+		}
+		bytes_read += ret;
+		length -= ret;
+	}
+	return (bytes_read + length);
+}
+
+
+/**
  * EventHandlerCallback() -- Receives events from
  * libupnp and forwards them to the parent process
  */
@@ -315,6 +350,7 @@ static void
 ClientManager_ClientLoop(iface_t *iface, int eventsfd, int infd, int outfd)
 {
 	int rc = 0;
+	ssize_t ret;
 	command_t cmd;
 
 	/* ignore SIGTERM */
@@ -361,126 +397,114 @@ ClientManager_ClientLoop(iface_t *iface, int eventsfd, int infd, int outfd)
 	UpnpSetMaxContentLength(MAX_CONTENT_LENGTH);
 
 	/* process commands from main process */
-	while (1) {
-		ssize_t ret;
-		while ((ret = read(infd, &cmd, sizeof(command_t))) > 0) {
+	while ((ret = read_or_eof(infd, &cmd, sizeof(command_t)))) {
 
-			assert(ret == sizeof(command_t));
+		assert(ret == sizeof(command_t));
 
-			switch (cmd) {
-			case CMD_UPNP_SUBSCRIBE:
-			{
-				UpnpClient_Handle handle;
-				char *eventURL;
-				int timeout;
-				Upnp_SID sid;
+		switch (cmd) {
+		case CMD_UPNP_SUBSCRIBE:
+		{
+			UpnpClient_Handle handle;
+			char *eventURL;
+			int timeout;
+			Upnp_SID sid;
 
-				PIPE_READ_VALUE(infd, handle);
-				PIPE_READ_STRING(infd, eventURL);
-				PIPE_READ_VALUE(infd, timeout);
+			PIPE_READ_VALUE(infd, handle);
+			PIPE_READ_STRING(infd, eventURL);
+			PIPE_READ_VALUE(infd, timeout);
 
-				rc = UpnpSubscribe(handle, eventURL, &timeout, sid);
+			rc = UpnpSubscribe(handle, eventURL, &timeout, sid);
 
-				PIPE_WRITE_VALUE(outfd, rc);
-				PIPE_WRITE_VALUE(outfd, timeout);
-				PIPE_WRITE_SID(outfd, sid);
-				PIPE_FREE_STRING(eventURL);
-				break;
-			}
-			case CMD_UPNP_UNSUBSCRIBE:
-			{
-				UpnpClient_Handle handle;
-				Upnp_SID sid;
-
-				PIPE_READ_VALUE(infd, handle);
-				PIPE_READ_SID(infd, sid);
-
-				rc = UpnpUnSubscribe(handle, sid);
-
-				PIPE_WRITE_VALUE(outfd, rc);
-				break;
-			}
-			case CMD_UPNP_SEND_ACTION:
-			{
-				char *actionURL;
-				char *serviceType;
-				UpnpClient_Handle handle;
-				IXML_Document *doc = NULL;
-				IXML_Document *res;
-
-				PIPE_READ_VALUE(infd, handle);
-				PIPE_READ_STRING(infd, actionURL);
-				PIPE_READ_STRING(infd, serviceType);
-				PIPE_READ_XML(infd, doc);
-
-				rc = UpnpSendAction(handle, actionURL, serviceType, NULL,
-					doc, &res);
-
-				PIPE_WRITE_VALUE(outfd, rc);
-				PIPE_WRITE_XML(outfd, res);
-				PIPE_FREE_XML(doc);
-				PIPE_FREE_STRING(serviceType);
-				PIPE_FREE_STRING(actionURL);
-				ixmlDocument_free(res);
-				break;
-			}
-#ifdef DEBUG
-			case CMD_TALLOC_REPORT:
-			{
-				void *tmp_ctx = talloc_new(context);
-				if (tmp_ctx == NULL) {
-					PIPE_WRITE_STRING(outfd, "");
-				} else {
-					talloc_set_name(tmp_ctx, "talloc_report");
-					StringStream* const ss = StringStream_Create (tmp_ctx);
-					FILE* const file = StringStream_GetFile (ss);
-					talloc_report(NULL, file);
-					const char* const str = StringStream_GetSnapshot
-						(ss, tmp_ctx, NULL);
-					PIPE_WRITE_STRING(outfd, str);
-					talloc_free(tmp_ctx);
-				}
-				break;
-			}
-			case CMD_TALLOC_REPORT_FULL:
-			{
-				void *tmp_ctx = talloc_new(context);
-				if (tmp_ctx == NULL) {
-					PIPE_WRITE_STRING(outfd, "");
-				} else {
-					talloc_set_name(tmp_ctx, "talloc_report_full");
-					StringStream* const ss = StringStream_Create (tmp_ctx);
-					FILE* const file = StringStream_GetFile (ss);
-					talloc_report_full(NULL, file);
-					const char* const str = StringStream_GetSnapshot
-						(ss, tmp_ctx, NULL);
-					PIPE_WRITE_STRING(outfd, str);
-					talloc_free(tmp_ctx);
-				}
-				break;
-			}
-#endif
-			case CMD_EXIT:
-			{
-				Log_Printf(LOG_DEBUG, "Client[%i]: Exit command received",
-					getpid());
-				goto CLIENT_EXIT;
-			}
-			default:
-				Log_Printf(LOG_ERROR, "Client[%i]: Unknown command received %i",
-					getpid(), cmd);
-				abort();
-			}
+			PIPE_WRITE_VALUE(outfd, rc);
+			PIPE_WRITE_VALUE(outfd, timeout);
+			PIPE_WRITE_SID(outfd, sid);
+			PIPE_FREE_STRING(eventURL);
+			break;
 		}
-		if (ret == -1) {
-			if (errno == EINTR) {
-				continue;
+		case CMD_UPNP_UNSUBSCRIBE:
+		{
+			UpnpClient_Handle handle;
+			Upnp_SID sid;
+
+			PIPE_READ_VALUE(infd, handle);
+			PIPE_READ_SID(infd, sid);
+
+			rc = UpnpUnSubscribe(handle, sid);
+
+			PIPE_WRITE_VALUE(outfd, rc);
+			break;
+		}
+		case CMD_UPNP_SEND_ACTION:
+		{
+			char *actionURL;
+			char *serviceType;
+			UpnpClient_Handle handle;
+			IXML_Document *doc = NULL;
+			IXML_Document *res;
+
+			PIPE_READ_VALUE(infd, handle);
+			PIPE_READ_STRING(infd, actionURL);
+			PIPE_READ_STRING(infd, serviceType);
+			PIPE_READ_XML(infd, doc);
+
+			rc = UpnpSendAction(handle, actionURL, serviceType, NULL,
+				doc, &res);
+
+			PIPE_WRITE_VALUE(outfd, rc);
+			PIPE_WRITE_XML(outfd, res);
+			PIPE_FREE_XML(doc);
+			PIPE_FREE_STRING(serviceType);
+			PIPE_FREE_STRING(actionURL);
+			ixmlDocument_free(res);
+			break;
+		}
+#ifdef DEBUG
+		case CMD_TALLOC_REPORT:
+		{
+			void *tmp_ctx = talloc_new(context);
+			if (tmp_ctx == NULL) {
+				PIPE_WRITE_STRING(outfd, "");
+			} else {
+				talloc_set_name(tmp_ctx, "talloc_report");
+				StringStream* const ss = StringStream_Create (tmp_ctx);
+				FILE* const file = StringStream_GetFile (ss);
+				talloc_report(NULL, file);
+				const char* const str = StringStream_GetSnapshot
+					(ss, tmp_ctx, NULL);
+				PIPE_WRITE_STRING(outfd, str);
+				talloc_free(tmp_ctx);
 			}
-			Log_Printf(LOG_ERROR, "Client[%i]: read returned %zd (errno=%i)",
-				getpid(), ret, errno);
+			break;
+		}
+		case CMD_TALLOC_REPORT_FULL:
+		{
+			void *tmp_ctx = talloc_new(context);
+			if (tmp_ctx == NULL) {
+				PIPE_WRITE_STRING(outfd, "");
+			} else {
+				talloc_set_name(tmp_ctx, "talloc_report_full");
+				StringStream* const ss = StringStream_Create (tmp_ctx);
+				FILE* const file = StringStream_GetFile (ss);
+				talloc_report_full(NULL, file);
+				const char* const str = StringStream_GetSnapshot
+					(ss, tmp_ctx, NULL);
+				PIPE_WRITE_STRING(outfd, str);
+				talloc_free(tmp_ctx);
+			}
+			break;
+		}
+#endif
+		case CMD_EXIT:
+		{
+			Log_Printf(LOG_DEBUG, "Client[%i]: Exit command received",
+				getpid());
+			goto CLIENT_EXIT;
+		}
+		default:
+			Log_Printf(LOG_ERROR, "Client[%i]: Unknown command received %i",
+				getpid(), cmd);
 			abort();
 		}
-		break;
 	}
 
 CLIENT_EXIT:
@@ -512,72 +536,60 @@ ClientManager_ProxyLoop(iface_t *iface, int eventsfd)
 	Upnp_EventType event_type;
 	UpnpClient_Handle handle;
 
-	while (1) {
-		while ((ret = read(eventsfd, &event_type, sizeof(Upnp_EventType))) > 0) {
+	while ((ret = read_or_eof(eventsfd, &event_type, sizeof(Upnp_EventType)))) {
 
-			assert(ret == sizeof(Upnp_EventType));
+		assert(ret == sizeof(Upnp_EventType));
 
-			PIPE_READ_VALUE(eventsfd, handle);
+		PIPE_READ_VALUE(eventsfd, handle);
 
-			switch (event_type) {
-			case UPNP_DISCOVERY_ADVERTISEMENT_ALIVE:
-			case UPNP_DISCOVERY_SEARCH_RESULT:
-			case UPNP_DISCOVERY_ADVERTISEMENT_BYEBYE:
-			{
-				struct Upnp_Discovery disc;
-				int has_discovery;
-				PIPE_READ_VALUE(eventsfd, has_discovery);
-				if (has_discovery) {
-					PIPE_READ_VALUE(eventsfd, disc);
-				}
-				PROCESS_EVENT(iface, event_type, &disc, &handle);
-				break;
+		switch (event_type) {
+		case UPNP_DISCOVERY_ADVERTISEMENT_ALIVE:
+		case UPNP_DISCOVERY_SEARCH_RESULT:
+		case UPNP_DISCOVERY_ADVERTISEMENT_BYEBYE:
+		{
+			struct Upnp_Discovery disc;
+			int has_discovery;
+			PIPE_READ_VALUE(eventsfd, has_discovery);
+			if (has_discovery) {
+				PIPE_READ_VALUE(eventsfd, disc);
 			}
-			case UPNP_CONTROL_ACTION_COMPLETE:
-			{
-				struct Upnp_Action_Complete action;
-				PIPE_READ_VALUE(eventsfd, action);
-				PIPE_READ_XML(eventsfd, action.ActionRequest);
-				PIPE_READ_XML(eventsfd, action.ActionResult);
-				PROCESS_EVENT(iface, event_type, &action, &handle);
-				PIPE_FREE_XML(action.ActionResult);
-				PIPE_FREE_XML(action.ActionRequest);
-				break;
-			}
-			case UPNP_EVENT_RECEIVED:
-			{
-				struct Upnp_Event event;
-				PIPE_READ_VALUE(eventsfd, event);
-				PIPE_READ_XML(eventsfd, event.ChangedVariables);
-				PROCESS_EVENT(iface, event_type, &event, &handle);
-				ixmlDocument_free(event.ChangedVariables);
-				break;
-			}
-			case UPNP_EVENT_SUBSCRIBE_COMPLETE:
-			case UPNP_EVENT_UNSUBSCRIBE_COMPLETE:
-			case UPNP_EVENT_RENEWAL_COMPLETE:
-			case UPNP_EVENT_AUTORENEWAL_FAILED:
-			case UPNP_EVENT_SUBSCRIPTION_EXPIRED:
-			{
-				struct Upnp_Event_Subscribe event_subscribe;
-				PIPE_READ_VALUE(eventsfd, event_subscribe);
-				PROCESS_EVENT(iface, event_type, &event_subscribe, &handle);
-				break;
-			}
-			default:
-				PROCESS_EVENT(iface, event_type, NULL, &handle);
-			}
+			PROCESS_EVENT(iface, event_type, &disc, &handle);
+			break;
 		}
-		if (ret == -1) {
-			if (errno == EINTR) {
-				continue;
-			}
-			Log_Printf(LOG_ERROR, "ClientManager_ProxyLoop: "
-				"read() returned %zd (errno=%i)",
-				ret, errno);
-			abort();
+		case UPNP_CONTROL_ACTION_COMPLETE:
+		{
+			struct Upnp_Action_Complete action;
+			PIPE_READ_VALUE(eventsfd, action);
+			PIPE_READ_XML(eventsfd, action.ActionRequest);
+			PIPE_READ_XML(eventsfd, action.ActionResult);
+			PROCESS_EVENT(iface, event_type, &action, &handle);
+			PIPE_FREE_XML(action.ActionResult);
+			PIPE_FREE_XML(action.ActionRequest);
+			break;
 		}
-		break;
+		case UPNP_EVENT_RECEIVED:
+		{
+			struct Upnp_Event event;
+			PIPE_READ_VALUE(eventsfd, event);
+			PIPE_READ_XML(eventsfd, event.ChangedVariables);
+			PROCESS_EVENT(iface, event_type, &event, &handle);
+			ixmlDocument_free(event.ChangedVariables);
+			break;
+		}
+		case UPNP_EVENT_SUBSCRIBE_COMPLETE:
+		case UPNP_EVENT_UNSUBSCRIBE_COMPLETE:
+		case UPNP_EVENT_RENEWAL_COMPLETE:
+		case UPNP_EVENT_AUTORENEWAL_FAILED:
+		case UPNP_EVENT_SUBSCRIPTION_EXPIRED:
+		{
+			struct Upnp_Event_Subscribe event_subscribe;
+			PIPE_READ_VALUE(eventsfd, event_subscribe);
+			PROCESS_EVENT(iface, event_type, &event_subscribe, &handle);
+			break;
+		}
+		default:
+			PROCESS_EVENT(iface, event_type, NULL, &handle);
+		}
 	}
 }
 
@@ -671,7 +683,7 @@ ClientManager_ProxyThread(void *data)
 		}
 
 		if (ret) {
-			Log_Printf(LOG_ERROR, "Child exited with %i", ret);
+			Log_Printf(LOG_ERROR, "ClientManager: Child exited with %i", ret);
 		}
 		iface->pid = -1;
 
@@ -715,7 +727,7 @@ ClientManager_AddInterface(char *name)
 {
 	iface_t *iface;
 
-	Log_Printf(LOG_INFO, "ClientManager: Adding interface: %s", name);
+	Log_Printf(LOG_INFO, "ClientManager: Starting UPnP client on interface: %s", name);
 
 	iface = talloc_zero(context, iface_t);
 	if (iface == NULL) {
@@ -751,7 +763,7 @@ ClientManager_AddInterface(char *name)
 static void
 ClientManager_RemoveInterface(iface_t *entry)
 {
-	Log_Printf(LOG_INFO, "ClientManager: Removing interface: %s",
+	Log_Printf(LOG_INFO, "ClientManager: Shutting down UPnP client on interface: %s",
 		entry->name);
 
 	pthread_mutex_lock(&entry->mutex);
