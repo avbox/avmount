@@ -377,7 +377,9 @@ main (int argc, char *argv[])
 	/*
 	 * Initialize the device list
 	 */
-	DeviceList_Init();
+	if (DeviceList_Init() == -1) {
+		return 1;
+	}
 
 	/*
 	 * Initialie stream engine

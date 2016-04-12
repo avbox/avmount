@@ -42,10 +42,10 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <pthread.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <upnp/upnp.h>
-#include <upnp/ithread.h>
 #include <upnp/upnptools.h>
 
 #ifdef HAVE_MALLOC_TRIM
@@ -57,7 +57,7 @@ static const unsigned int CHECK_SUBSCRIPTIONS_TIMEOUT = 30; // in seconds
 
 
 
-static ithread_t g_timer_thread;
+static pthread_t WorkerThread;
 
 static char* g_ssdp_target = CONTENT_DIR_SERVICE_TYPE;
 
@@ -68,7 +68,7 @@ static char* g_ssdp_target = CONTENT_DIR_SERVICE_TYPE;
  * All functions should lock this mutex before reading
  * or writing the device list. 
  */
-static ithread_mutex_t DeviceListMutex;
+static pthread_mutex_t DeviceListMutex = PTHREAD_MUTEX_INITIALIZER;
 
 
 /*
@@ -194,7 +194,7 @@ DeviceList_RemoveDevice (const char* deviceId)
 {
 	int rc = UPNP_E_SUCCESS;
 
-	ithread_mutex_lock (&DeviceListMutex);
+	pthread_mutex_lock(&DeviceListMutex);
 	
 	DeviceNode* const devnode = GetDeviceListNodeFromId (deviceId);
 	if (devnode) {
@@ -204,7 +204,7 @@ DeviceList_RemoveDevice (const char* deviceId)
 		rc = UPNP_E_INVALID_DEVICE;
 	}
 	
-	ithread_mutex_unlock (&DeviceListMutex);
+	pthread_mutex_unlock(&DeviceListMutex);
 	
 	return rc;
 }
@@ -223,13 +223,13 @@ DeviceList_RemoveDevice (const char* deviceId)
 static int
 DeviceList_RemoveAll (void)
 {
-	ithread_mutex_lock( &DeviceListMutex );
+	pthread_mutex_lock( &DeviceListMutex );
 	DeviceNode *devnode;
 	LIST_FOREACH_SAFE(DeviceNode*, devnode, &GlobalDeviceList, {
 		LIST_REMOVE(devnode);
 		talloc_free(devnode);
 	});
-	ithread_mutex_unlock( &DeviceListMutex );
+	pthread_mutex_unlock( &DeviceListMutex );
 	return UPNP_E_SUCCESS;
 }
 
@@ -252,14 +252,14 @@ HandleEvent (Upnp_SID sid,
 	     int eventkey,
 	     IXML_Document* changes )
 {
-  ithread_mutex_lock( &DeviceListMutex );
+  pthread_mutex_lock( &DeviceListMutex );
   
   Log_Printf (LOG_DEBUG, "Received Event: %d for SID %s", eventkey, NN(sid));
   Service* const serv = GetService (sid, FROM_SID);
   if (serv) 
     Service_UpdateState (serv, changes);
   
-  ithread_mutex_unlock( &DeviceListMutex );
+  pthread_mutex_unlock( &DeviceListMutex );
 }
 
 
@@ -282,7 +282,7 @@ AddDevice (const char *iface, const char* deviceId,
 	   const char* descLocation,
 	   int expires, UpnpClient_Handle client_handle)
 {
-	ithread_mutex_lock (&DeviceListMutex);
+	pthread_mutex_lock (&DeviceListMutex);
 
 	DeviceNode* devnode = GetDeviceListNodeFromId(deviceId);
 	
@@ -301,7 +301,7 @@ AddDevice (const char *iface, const char* deviceId,
 		// *unlock* before trying to download the Device Description 
 		// Document, which can take a long time in some error cases 
 		// (e.g. timeout if network problems)
-		ithread_mutex_unlock (&DeviceListMutex);
+		pthread_mutex_unlock (&DeviceListMutex);
 
 		if (descLocation == NULL) {
 			Log_Printf (LOG_ERROR, 
@@ -377,7 +377,7 @@ AddDevice (const char *iface, const char* deviceId,
 			// Relock the device list (and check that the same
 			// device has not already been added by another thread
 			// while the list was unlocked)
-			ithread_mutex_lock (&DeviceListMutex);
+			pthread_mutex_lock (&DeviceListMutex);
 			if (GetDeviceListNodeFromId(deviceId) != NULL) {
 				Log_Printf (LOG_WARNING, 
 					    "Device Id=%s already added",
@@ -391,7 +391,7 @@ AddDevice (const char *iface, const char* deviceId,
 																					 deviceId);
 				if (devnode->deviceId == NULL) {
 					Log_Printf(LOG_ERROR, "Could not allocate deviceId");
-					ithread_mutex_unlock (&DeviceListMutex);
+					pthread_mutex_unlock (&DeviceListMutex);
 					talloc_free (devnode);
 					return;
 				}
@@ -418,7 +418,7 @@ AddDevice (const char *iface, const char* deviceId,
 			}
 		}
 	}
-	ithread_mutex_unlock (&DeviceListMutex);
+	pthread_mutex_unlock (&DeviceListMutex);
 }
   
 
@@ -577,7 +577,7 @@ DeviceList_EventHandlerCallback (const char *iface_name, Upnp_EventType event_ty
 				    "Received Event Renewal for eventURL %s", 
 				    NN(e->PublisherUrl));
 
-			ithread_mutex_lock (&DeviceListMutex);
+			pthread_mutex_lock (&DeviceListMutex);
 
 			Service* const serv = GetService (e->PublisherUrl,
 							  FROM_EVENT_URL);
@@ -588,7 +588,7 @@ DeviceList_EventHandlerCallback (const char *iface_name, Upnp_EventType event_ty
 				else			      
 					Service_SetSid (serv, e->Sid);
 			}
-			ithread_mutex_unlock (&DeviceListMutex);
+			pthread_mutex_unlock (&DeviceListMutex);
 		}
 		break;
 	}
@@ -602,14 +602,14 @@ DeviceList_EventHandlerCallback (const char *iface_name, Upnp_EventType event_ty
 		Log_Printf (LOG_DEBUG, "Renewing subscription for eventURL %s",
 			    NN(e->PublisherUrl));
      
-		ithread_mutex_lock (&DeviceListMutex);
+		pthread_mutex_lock (&DeviceListMutex);
       
 		Service* const serv = GetService (e->PublisherUrl, 
 						  FROM_EVENT_URL);
 		if (serv) 
 			Service_SubscribeEventURL (iface_name, serv);
 		
-		ithread_mutex_unlock (&DeviceListMutex);
+		pthread_mutex_unlock (&DeviceListMutex);
 		
 		break;
 	}
@@ -641,13 +641,13 @@ _DeviceList_LockDevice (const char* deviceName)
 
 	// XXX coarse implementation : lock the whole device list, 
 	// XXX not only the device.
-	ithread_mutex_lock (&DeviceListMutex);
+	pthread_mutex_lock (&DeviceListMutex);
 	
 	const DeviceNode* devnode = GetDeviceNodeFromName (deviceName, true);
 	if (devnode) 
 		dev = devnode->d;
 	if (dev == NULL)
-		ithread_mutex_unlock (&DeviceListMutex);
+		pthread_mutex_unlock (&DeviceListMutex);
 	return dev;
 }
 
@@ -659,9 +659,8 @@ inline void
 _DeviceList_UnlockDevice (Device* dev)
 {
 	if (dev)
-		ithread_mutex_unlock (&DeviceListMutex);
+		pthread_mutex_unlock (&DeviceListMutex);
 }
-
 
 /*****************************************************************************
  * _DeviceList_LockService
@@ -676,14 +675,14 @@ _DeviceList_LockService (const char* deviceName, const char* serviceType)
 
 	// XXX coarse implementation : lock the whole device list, 
 	// XXX not only the service.
-	ithread_mutex_lock (&DeviceListMutex);
+	pthread_mutex_lock (&DeviceListMutex);
 	
 	const DeviceNode* devnode = GetDeviceNodeFromName (deviceName, true);
 	if (devnode) 
 		serv = Device_GetServiceFrom (devnode->d, serviceType, 
 					      FROM_SERVICE_TYPE, true);
 	if (serv == NULL)
-		ithread_mutex_unlock (&DeviceListMutex);
+		pthread_mutex_unlock (&DeviceListMutex);
 	return serv;
 }
 
@@ -695,7 +694,7 @@ inline void
 _DeviceList_UnlockService (Service* serv)
 {
 	if (serv)
-		ithread_mutex_unlock (&DeviceListMutex);
+		pthread_mutex_unlock (&DeviceListMutex);
 }
 
 /*****************************************************************************
@@ -704,7 +703,7 @@ _DeviceList_UnlockService (Service* serv)
 PtrArray*
 DeviceList_GetDevicesNames (void* context)
 {
-	ithread_mutex_lock (&DeviceListMutex);
+	pthread_mutex_lock (&DeviceListMutex);
 
 	Log_Printf (LOG_DEBUG, "GetDevicesNames");
 	PtrArray* const a = PtrArray_CreateWithCapacity 
@@ -723,7 +722,7 @@ DeviceList_GetDevicesNames (void* context)
 		}
 	}
   
-	ithread_mutex_unlock (&DeviceListMutex);
+	pthread_mutex_unlock (&DeviceListMutex);
 	
 	return a;
 }
@@ -738,7 +737,7 @@ DeviceList_GetStatusString (void* context)
 {
 	char* ret = talloc_strdup (context, "");
 	if (ret) {
-		ithread_mutex_lock (&DeviceListMutex);
+		pthread_mutex_lock (&DeviceListMutex);
     
 		// Print the universal device names for each device
 		// in the global device list
@@ -751,7 +750,7 @@ DeviceList_GetStatusString (void* context)
 					NN(name), NN(devnode->deviceId));
 			}
 		}
-		ithread_mutex_unlock (&DeviceListMutex);
+		pthread_mutex_unlock (&DeviceListMutex);
 	}
 	return ret;
 }
@@ -767,7 +766,7 @@ DeviceList_GetDeviceStatusString (void* context, const char* deviceName,
 {
   char* ret = NULL;
   
-  ithread_mutex_lock (&DeviceListMutex);
+  pthread_mutex_lock (&DeviceListMutex);
   
   DeviceNode* devnode = GetDeviceNodeFromName (deviceName, true);
   if (devnode) { 
@@ -778,7 +777,7 @@ DeviceList_GetDeviceStatusString (void* context, const char* deviceName,
     talloc_free (s);
   } 
   
-  ithread_mutex_unlock (&DeviceListMutex);
+  pthread_mutex_unlock (&DeviceListMutex);
   
   return ret;
 }
@@ -801,7 +800,7 @@ DeviceList_GetDeviceStatusString (void* context, const char* deviceName,
 static void
 DeviceList_VerifyTimeouts (int incr)
 {
-	ithread_mutex_lock (&DeviceListMutex);
+	pthread_mutex_lock (&DeviceListMutex);
 
 	DeviceNode *devnode;
 	LIST_FOREACH_SAFE(DeviceNode*, devnode, &GlobalDeviceList, {
@@ -829,7 +828,7 @@ DeviceList_VerifyTimeouts (int incr)
 			}
 		}
 	});
-	ithread_mutex_unlock (&DeviceListMutex);
+	pthread_mutex_unlock (&DeviceListMutex);
 }
 
 
@@ -839,15 +838,15 @@ DeviceList_VerifyTimeouts (int incr)
 static void
 DeviceList_GC()
 {
-	ithread_mutex_lock (&DeviceListMutex);
+	pthread_mutex_lock (&DeviceListMutex);
 	DeviceNode *devnode;
 	LIST_FOREACH(DeviceNode*, devnode, &GlobalDeviceList) {
 		Device_GC(devnode->d);
 	}
+	pthread_mutex_unlock (&DeviceListMutex);
 #ifdef HAVE_MALLOC_TRIM
 	malloc_trim(4096);
 #endif
-	ithread_mutex_unlock (&DeviceListMutex);
 }
 
 
@@ -869,7 +868,7 @@ static void*
 DeviceList_BackgroundWorker(void* arg)
 {
 	while (true) {
-		isleep(CHECK_SUBSCRIPTIONS_TIMEOUT);
+		sleep(CHECK_SUBSCRIPTIONS_TIMEOUT);
 		DeviceList_VerifyTimeouts(CHECK_SUBSCRIPTIONS_TIMEOUT);
 		DeviceList_GC();
 	}
@@ -883,17 +882,17 @@ DeviceList_BackgroundWorker(void* arg)
 int
 DeviceList_Init()
 {
-	ithread_mutex_init (&DeviceListMutex, NULL);
-
+	/* Initialize linked list */
 	LIST_INIT(&GlobalDeviceList);
 
-	// Makes the XML parser more tolerant to malformed text
+	/* Makes the XML parser more tolerant to malformed text */
 	ixmlRelaxParser ('?');
 
-	//DeviceList_RefreshAll (true);
-
-	// start a timer thread
-	ithread_create (&g_timer_thread, NULL, DeviceList_BackgroundWorker, NULL);
+	/* Start background worker */
+	if (pthread_create(&WorkerThread, NULL, DeviceList_BackgroundWorker, NULL) == -1) {
+		Log_Print(LOG_ERROR, "DeviceList_Init() -- pthread_create() failed.");
+		return -1;
+	}
 
 	return 0;
 }
