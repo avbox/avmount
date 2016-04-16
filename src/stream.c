@@ -20,7 +20,7 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#	include <config.h>
+#	include "../config.h"
 #endif
 
 #include <stdio.h>
@@ -199,6 +199,7 @@ void
 Stream_Destroy()
 {
 	Stream *stream;
+	Log_Print(LOG_DEBUG, "Stream_Destroy() running");
 	LIST_FOREACH_SAFE(Stream*, stream, &streams, {
 		Stream_RemoveFromList(stream);
 		Stream_Free(stream);

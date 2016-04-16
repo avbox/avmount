@@ -27,7 +27,7 @@
 #define CHARSET_H_INCLUDED 1
 
 #ifdef HAVE_CONFIG_H
-#	include <config.h>	/* import "HAVE_CHARSET" definition */
+#	include "../config.h"
 #endif
 
 #include <stddef.h>

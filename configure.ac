@@ -44,6 +44,13 @@ if test x"$enable_charset" = xyes; then
 		  [Define to 1 to have charset conversion code])
 fi
 
+AC_ARG_ENABLE([ipv6], [IPv6 support])
+if test x"$enable_ipv6" = xyes; then
+	AC_DEFINE([ENABLE_IPV6],1,[Define to 1 to enable IPv6 support])
+else
+	AC_DEFINE([ENABLE_IPV6],0,[Define to 1 to enable IPv6 support])
+fi
+
 
 
 #
@@ -263,6 +270,16 @@ int main()
 	[AC_MSG_RESULT([yes])],
 	[AC_MSG_ERROR([no])])
 fi
+
+#
+# If IPv6 is enabled make sure that libupnp is ipv6 enabled
+#
+if test x"$enable_ipv6" = xyes; then
+	AC_CHECK_LIB([upnp], [UpnpInit2],
+		[AC_DEFINE([HAVE_UPNPINIT2], 1, [Define to 1 if we have UpnpInit2])],
+		[AC_MSG_ERROR([It appears that libupnp has been compiled without IPv6 support!])])
+fi
+
 
 #
 # libcurl

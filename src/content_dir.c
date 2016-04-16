@@ -23,7 +23,7 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#	include <config.h>
+#	include "../config.h"
 #endif
 
 #include "content_dir_p.h"

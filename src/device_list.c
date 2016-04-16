@@ -26,7 +26,7 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#	include <config.h>
+#	include "../config.h"
 #endif
 
 #include "device_list.h"
@@ -45,6 +45,7 @@
 #include <pthread.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <time.h>
 #include <upnp/upnp.h>
 #include <upnp/upnptools.h>
 
@@ -56,8 +57,10 @@
 static const unsigned int CHECK_SUBSCRIPTIONS_TIMEOUT = 30; // in seconds
 
 
-
+static int WorkerThreadAbort = 0;
 static pthread_t WorkerThread;
+static pthread_cond_t WorkerThreadSignal;
+static pthread_mutex_t WorkerThreadSignalMutex;
 
 static char* g_ssdp_target = CONTENT_DIR_SERVICE_TYPE;
 
@@ -867,10 +870,20 @@ DeviceList_GC()
 static void*
 DeviceList_BackgroundWorker(void* arg)
 {
-	while (true) {
-		sleep(CHECK_SUBSCRIPTIONS_TIMEOUT);
-		DeviceList_VerifyTimeouts(CHECK_SUBSCRIPTIONS_TIMEOUT);
-		DeviceList_GC();
+	struct timespec ts;
+
+	while (!WorkerThreadAbort) {
+		pthread_mutex_lock(&WorkerThreadSignalMutex);
+		clock_gettime(CLOCK_REALTIME, &ts);
+		ts.tv_sec += CHECK_SUBSCRIPTIONS_TIMEOUT;
+		pthread_cond_timedwait(&WorkerThreadSignal,
+			&WorkerThreadSignalMutex, &ts);
+		pthread_mutex_unlock(&WorkerThreadSignalMutex);
+
+		if (!WorkerThreadAbort) {
+			DeviceList_VerifyTimeouts(CHECK_SUBSCRIPTIONS_TIMEOUT);
+			DeviceList_GC();
+		}
 	}
 	return NULL;
 }
@@ -888,6 +901,9 @@ DeviceList_Init()
 	/* Makes the XML parser more tolerant to malformed text */
 	ixmlRelaxParser ('?');
 
+	pthread_mutex_init(&WorkerThreadSignalMutex, NULL);
+	pthread_cond_init(&WorkerThreadSignal, NULL);
+
 	/* Start background worker */
 	if (pthread_create(&WorkerThread, NULL, DeviceList_BackgroundWorker, NULL) == -1) {
 		Log_Print(LOG_ERROR, "DeviceList_Init() -- pthread_create() failed.");
@@ -900,6 +916,16 @@ DeviceList_Init()
 void
 DeviceList_Destroy()
 {
+	Log_Printf(LOG_DEBUG, "DeviceList_Destroy() running");
+
+	/* Abort and wait for the worker thread to exit */
+	pthread_mutex_lock(&WorkerThreadSignalMutex);
+	WorkerThreadAbort = 1;
+	pthread_cond_signal(&WorkerThreadSignal);
+	pthread_mutex_unlock(&WorkerThreadSignalMutex);
+	pthread_join(WorkerThread, NULL);
+
+	/* destroy all devices */
 	DeviceList_RemoveAll();
 }
 

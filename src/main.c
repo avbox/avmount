@@ -22,7 +22,7 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#	include <config.h>
+#	include "../config.h"
 #endif
 
 #include <stdio.h>
@@ -310,9 +310,13 @@ main (int argc, char *argv[])
 			     s != NULL;
 			     s = strtok_r (NULL, ",", &tokptr)) {
 				if (strcmp (s, "leak") == 0) {
+#ifdef DEBUG
 					talloc_enable_leak_report();
+#endif
 				} else if (strcmp (s, "leakfull") == 0) {
+#ifdef DEBUG
 					talloc_enable_leak_report_full();
+#endif
 				} else if (strcmp (s, "fuse") == 0) {
 					/* FUSE_ARG ("-d"); */
 				} else if (strcmp (s, "debug") == 0) {
@@ -405,6 +409,7 @@ main (int argc, char *argv[])
 	 * Cleanup and exit
 	 */
 	Log_Print(LOG_DEBUG, "Shutting down ...");
+	ClientManager_Stop();
 	FuseFS_Destroy(1);
 	Stream_Destroy();
 	DeviceList_Destroy();

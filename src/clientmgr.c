@@ -20,7 +20,7 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#include <config.h>
+#	include "../config.h"
 #endif
 
 #include <stdlib.h>
@@ -32,6 +32,10 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include <sys/socket.h>
+#include <sys/ioctl.h>
+#include <netinet/in.h>
+#include <net/if.h>
 #include <dirent.h>
 #include <fcntl.h>
 #include <pthread.h>
@@ -84,6 +88,7 @@ static void *context = NULL;
 static int abort_mon = 0;
 static pid_t mainpid = 0;
 static pthread_t monthread;
+static DIR* dir;
 
 LIST_DECLARE_STATIC(ifaces);
 static pthread_mutex_t list_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -344,6 +349,39 @@ EventHandlerCallback (Upnp_EventType event_type,
 }
 
 /**
+ * ClientManager_GetInterfaceIp() -- Gets the IP address of a network
+ * interface
+ */
+#if !defined(ENABLE_IPV6) || !defined(HAVE_UPNPINIT2)
+static char*
+ClientManager_GetInterfaceIp(char *iface_name)
+{
+
+	int fd;
+	struct ifreq ifr;
+
+	ifr.ifr_addr.sa_family = AF_INET;
+	strncpy(ifr.ifr_name, iface_name, IFNAMSIZ-1);
+
+	if ((fd = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
+		Log_Printf(LOG_ERROR, "ClientManager_GetInterfaceIp(): socket() failed (errno=%i)",
+			errno);
+		return NULL;
+	}
+	if (ioctl(fd, SIOCGIFADDR, &ifr) == -1) {
+		Log_Printf(LOG_ERROR, "ClientManager_GetInterfaceIp(): ioctl() failed (errno=%i)",
+			errno);
+		return NULL;
+	}
+
+	close(fd);
+
+	return talloc_strdup(context,
+		inet_ntoa(((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr));
+}
+#endif
+
+/**
  * This runs the UPnP client on a child process
  */
 static void
@@ -362,12 +400,24 @@ ClientManager_ClientLoop(iface_t *iface, int eventsfd, int infd, int outfd)
 	Log_Printf (LOG_INFO, "Client[%i]: Intializing UPnP client on interface %s",
 		getpid(), iface->name);
 
+#if defined(ENABLE_IPV6) && defined(HAVE_UPNPINIT2)
 	/* Initialize libupnp */
 	rc = UpnpInit2(iface->name, 0);
-	if (UPNP_E_SUCCESS != rc) {
-		Log_Printf(LOG_ERROR, "Client[%i]: UpnpInit2() Error: %d",
+#else
+	char *ip = ClientManager_GetInterfaceIp(iface->name);
+	if (ip == NULL) {
+		Log_Printf(LOG_ERROR, "ClientManager_ClientLoop(): "
+			"Could not get IP for interface '%s'", iface->name);
+		rc = -1;
+		goto CLIENT_EXIT;
+	}
+	rc = UpnpInit(ip, 0);
+	talloc_free(ip);
+#endif
+	if (rc != UPNP_E_SUCCESS) {
+		Log_Printf(LOG_ERROR, "Client[%i]: UpnpInit() Error: %d",
 			getpid(), rc);
-		if (rc == UPNP_E_SOCKET_ERROR) {
+		if (rc/100 == UPNP_E_SOCKET_ERROR/100) {
 			Log_Printf(LOG_ERROR, "Client[%i]: Check network configuration, "
 				"in particular that a multicast route "
 				"is set for the default network "
@@ -498,6 +548,12 @@ ClientManager_ClientLoop(iface_t *iface, int eventsfd, int infd, int outfd)
 		{
 			Log_Printf(LOG_DEBUG, "Client[%i]: Exit command received",
 				getpid());
+
+			/*
+			 * Wait for any events being handled to complete
+			 * and then exit
+			 */
+			pthread_mutex_lock(&iface->event_lock);
 			goto CLIENT_EXIT;
 		}
 		default:
@@ -518,6 +574,12 @@ CLIENT_EXIT:
 
 	/* Shutdown UPnP SDK */
 	UpnpFinish();
+
+	if (cmd == CMD_EXIT) {
+		pthread_mutex_unlock(&iface->event_lock);
+	}
+
+	Log_Printf(LOG_DEBUG, "Client[%i]: Exiting", getpid());
 
 	/* If there was an error exit with failure status */
 	if (rc != UPNP_E_SUCCESS) {
@@ -591,6 +653,7 @@ ClientManager_ProxyLoop(iface_t *iface, int eventsfd)
 			PROCESS_EVENT(iface, event_type, NULL, &handle);
 		}
 	}
+	Log_Printf(LOG_DEBUG, "ClientManager_ProxyLoop() -- Exiting...");
 }
 
 /**
@@ -625,6 +688,9 @@ ClientManager_ProxyThread(void *data)
 		close(eventsfd[0]);
 		close(readfd[0]);
 		close(writefd[1]);
+
+		/* close open procfs directory */
+		/* closedir(dir); */
 
 		/*
 		 * Free the device list, stream buffers,
@@ -692,6 +758,8 @@ ClientManager_ProxyThread(void *data)
 		close(readfd[0]);
 		close(writefd[1]);
 	}
+	Log_Printf(LOG_DEBUG, "ClientManager_ProxyThread() -- Exiting.");
+	pthread_exit(0);
 	return NULL;
 }
 
@@ -772,6 +840,7 @@ ClientManager_RemoveInterface(iface_t *entry)
 		command_t cmd = CMD_EXIT;
 		PIPE_WRITE_VALUE(entry->infd, cmd);
 		pthread_join(entry->thread, NULL);
+		Log_Printf(LOG_DEBUG, "ClientManager_RemoveInterface() -- Client thread joined.");
 	}
 
 	/* remove from list and destroy */
@@ -870,7 +939,7 @@ ClientManager_MonitorInterfaces(void *arg)
 	(void) arg;
 
 	while (abort_mon == 0) {
-		DIR *dir = opendir(sysfs_net);
+		dir = opendir(sysfs_net);
 		if (dir == NULL) {
 			sleep(2);
 			continue;
@@ -948,8 +1017,6 @@ ClientManager_MonitorInterfaces(void *arg)
 		sleep(POLL_INTERVAL);
 		ClientManager_CheckClients();
 	}
-	ClientManager_CleanupInit();
-	ClientManager_Cleanup();
 	return NULL;
 }
 
@@ -979,15 +1046,27 @@ ClientManager_Init()
 	}
 }
 
+void
+ClientManager_Stop()
+{
+	Log_Print(LOG_DEBUG, "ClientManager_Stop() -- Stopping");
+
+	/* wait for ClientManager to exit */
+	abort_mon = 1;
+	pthread_join(monthread, NULL);
+}
+
 /**
  * ClientManager_Destroy() -- Shutdown the client manager
  */
 void
 ClientManager_Destroy()
 {
-	/* wait for ClientManager to exit */
-	abort_mon = 1;
-	pthread_join(monthread, NULL);
+	Log_Print(LOG_DEBUG, "ClientManager_Destroy() running");
+
+	/* Shutdown all clients */
+	ClientManager_CleanupInit();
+	ClientManager_Cleanup();
 
 	/* free stuff */
 	talloc_free(context);

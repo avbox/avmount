@@ -25,7 +25,7 @@
 #define XML_UTIL_H_INCLUDED
 
 #ifdef HAVE_CONFIG_H
-#	include <config.h>
+#	include "../config.h"
 #endif
 
 #include <stdbool.h>

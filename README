@@ -231,11 +231,17 @@ Troubleshooting
   been loaded before running avmount (try 'modprobe fuse' as root).
 
 * if avmount starts but does not detect your devices and logs the following
-  UPnP error -208 (socket error), make sure that there is a multicast route
+  UPnP error -2XX (socket error), make sure that there is a multicast route
   set for the default network interface. This should be done automatically on
   recent distributions, else issue this command (where 'eth0' is the default interface) :
 	route add -net 239.0.0.0 netmask 255.0.0.0 dev eth0
   or	route add -net 224.0.0.0 netmask 240.0.0.0 dev eth0
+
+  Another possibility is that libupnp was compiled with IPv6 support but
+  it's running on a system without IPv6 support. In that case the solution
+  is to either rebuild libupnp without IPv6 support and then rebuild avmount
+  or just enable IPv6 support on the kernel and make sure that the module
+  is loaded.
 
 * if your UPnP Media Server is behind a closed firewall, it won't be 
   visible in avmount. Therefore, if there is a firewall on the machine

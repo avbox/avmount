@@ -22,7 +22,7 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#	include <config.h>
+#	include "../config.h"
 #endif
 
 #include <fuse.h>
@@ -577,6 +577,7 @@ FuseFS_PrintVersionString(FILE *f)
 void
 FuseFS_Destroy(int teardown)
 {
+	Log_Print(LOG_DEBUG, "FuseFS_Destroy() running");
 #if USE_FUSE_SETUP
 	if (fuse != NULL) {
 		if (teardown) {

@@ -30,6 +30,9 @@ void
 ClientManager_Init();
 
 void
+ClientManager_Stop();
+
+void
 ClientManager_Destroy();
 
 int
