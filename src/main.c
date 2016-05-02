@@ -50,6 +50,9 @@
 
 #define DEFAULT_SEARCH_HISTORY_SIZE  (100)
 
+#define STRINGIZE2(x) #x
+#define STRINGIZE(x) STRINGIZE2(x)
+
 
 /*****************************************************************************
  * @fn 		stdout_print
@@ -170,8 +173,17 @@ bad_usage (const char* progname, ...)
 static void
 version (FILE* stream, const char* progname)
 {
+#ifdef GIT_COMMIT
+	char commit[13];
+	commit[(sizeof(commit) / sizeof(char)) - 1] = '\0';
+	memcpy(commit, STRINGIZE(GIT_COMMIT), sizeof(commit) - sizeof(char));
+	fprintf(stream,
+		"%s (" PACKAGE ") " VERSION "-%s\n",
+		progname, commit);
+#else
 	fprintf (stream,
 		 "%s (" PACKAGE ") " VERSION "\n", progname);
+#endif
 	fprintf (stream, "Copyright (C) 2016 Fernando Rodriguez\n");
 	fprintf (stream, "Copyright (C) 2005 Rémi Turboult\n");
 	fprintf (stream, "Compiled against: ");

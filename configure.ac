@@ -66,6 +66,7 @@ AC_PROG_MAKE_SET
 AC_PROG_LN_S
 
 AC_PATH_PROG(PERL,perl)
+AC_PATH_PROG(GIT,git)
 
 # for pkg_config
 export PKG_CONFIG_PATH=$PKG_CONFIG_PATH:/usr/local/lib/pkgconfig
@@ -294,6 +295,22 @@ AC_DEFINE([USE_CURL], 1, [Define to 1 to use libcurl])
 #
 AC_CHECK_FUNCS([malloc_trim])
 
+#
+# git commit hash
+#
+if test x"$GIT" != x; then
+	have_repo=$($GIT log -1)
+	if test x"$have_repo" != x; then
+		AC_MSG_CHECKING([git commit hash])
+		commit_hash="$($GIT log -1 | head -n1 | cut -d' ' -f2)"
+		if test x"$commit_hash" != x; then
+			AC_MSG_RESULT([$commit_hash])
+			AC_DEFINE_UNQUOTED([GIT_COMMIT], [$commit_hash], [Git commit hash])
+		else
+			AC_MSG_RESULT([no])
+		fi
+	fi
+fi
 
 #
 # Output Makefiles
