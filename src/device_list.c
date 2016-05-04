@@ -929,3 +929,25 @@ DeviceList_Destroy()
 	DeviceList_RemoveAll();
 }
 
+/**
+ * DeviceList_Suspend() -- Locks all mutexes. This is used by clientmgr.c
+ * to make sure that the device list is in a known state before forking.
+ * Otherwise if we fork while the worker thread mutex is locked the child
+ * will deadlock when it tries to destroy the device list during startup.
+ */
+void
+DeviceList_Suspend()
+{
+	pthread_mutex_lock(&WorkerThreadSignalMutex);
+	pthread_mutex_lock(&DeviceListMutex);
+}
+
+/**
+ * DeviceList_Resume() -- Unlocks all mutexes.
+ */
+void
+DeviceList_Resume()
+{
+	pthread_mutex_unlock(&WorkerThreadSignalMutex);
+	pthread_mutex_unlock(&DeviceListMutex);
+}

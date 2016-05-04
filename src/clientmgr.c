@@ -678,8 +678,12 @@ ClientManager_ProxyThread(void *data)
 		abort();
 	}
 
+	/* Make sure the device list is in a known state */
+	DeviceList_Suspend();
+
 	if ((pid = fork()) == -1) {
 		Log_Printf(LOG_ERROR, "ClientManager_AddInterface() -- fork() failed");
+		DeviceList_Resume();
 		return NULL;
 
 	} else if (pid == 0) { /* CHILD */
@@ -696,6 +700,7 @@ ClientManager_ProxyThread(void *data)
 		 * Free the device list, stream buffers,
 		 * and all other memory not needed by the child
 		 */
+		DeviceList_Resume();
 		Stream_Destroy();
 		DeviceList_Destroy();
 		FuseFS_Destroy(0);
@@ -726,6 +731,9 @@ ClientManager_ProxyThread(void *data)
 		close(eventsfd[1]);
 		close(readfd[1]);
 		close(writefd[0]);
+
+		/* unlock the device list */
+		DeviceList_Resume();
 
 		iface->pid = pid;
 		iface->eventsfd = eventsfd[0];
@@ -831,19 +839,30 @@ ClientManager_AddInterface(char *name)
 static void
 ClientManager_RemoveInterface(iface_t *entry)
 {
+	const command_t cmd = CMD_EXIT;
+
 	Log_Printf(LOG_INFO, "ClientManager: Shutting down UPnP client on interface: %s",
 		entry->name);
 
-	pthread_mutex_lock(&entry->mutex);
-
+	/*
+	 * if the child process is running send it the EXIT command
+	 * and wait for it to exit (we'll know it exited when it's
+	 * proxy thread exits).
+	 */
 	if (entry->pid != -1) {
-		command_t cmd = CMD_EXIT;
-		PIPE_WRITE_VALUE(entry->infd, cmd);
-		pthread_join(entry->thread, NULL);
-		Log_Printf(LOG_DEBUG, "ClientManager_RemoveInterface() -- Client thread joined.");
+		pthread_mutex_lock(&entry->mutex);
+		if (entry->pid != -1) {
+			PIPE_WRITE_VALUE(entry->infd, cmd);
+			pthread_mutex_unlock(&entry->mutex);
+			pthread_join(entry->thread, NULL);
+			Log_Printf(LOG_DEBUG, "ClientManager_RemoveInterface() -- Client thread joined.");
+		} else {
+			pthread_mutex_unlock(&entry->mutex);
+		}
 	}
 
 	/* remove from list and destroy */
+	pthread_mutex_lock(&entry->mutex);
 	LIST_REMOVE(entry);
 	pthread_mutex_unlock(&entry->mutex);
 	talloc_free(entry);
