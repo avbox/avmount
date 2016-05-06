@@ -34,6 +34,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 
 #include "talloc_util.h"
 #include "device_list.h"
@@ -125,6 +126,7 @@ usage (FILE* stream, const char* progname)
      "    -h or --help           print this help, then exit\n"
      "    --version              print version number, then exit\n"
      "    -o [options]           mount options (see below)\n"
+     "    -p [port]              specify port number\n"
      "    -d[levels]             enable debug output (implies -f)\n"
      "    -f                     foreground operation (default: daemonized)\n"
      "\n"
@@ -213,9 +215,13 @@ main (int argc, char *argv[])
 	int rc;
 	bool background = true;
 
-	// Create a working context for temporary strings
+	/* Create a working context for temporary strings */
 	void* const tmp_ctx = talloc_autofree_context();
 
+	/*
+	 * Check if the -l argument was provided and if so, then open
+	 * the log file for appending
+	 */
 	for (rc = 0; rc < argc; rc++) {
 		if (!strcmp(argv[rc], "-l")) {
 			if ((rc + 1) >= argc) {
@@ -231,6 +237,10 @@ main (int argc, char *argv[])
 			fflush(logf);
 		}
 	}
+
+	/*
+	 * if no log file was provided then use stdout
+	 */
 	if (logf == NULL) {
 		logf = stdout;
 	}
@@ -248,6 +258,7 @@ main (int argc, char *argv[])
 	/*
 	 * Handle options
 	 */
+	int port = 0;
 	char* charset = NULL;
 	DJFS_Flags djfs_flags = DJFS_SHOW_METADATA;
 	size_t search_history_size = DEFAULT_SEARCH_HISTORY_SIZE;
@@ -356,6 +367,47 @@ main (int argc, char *argv[])
 			free (levels_copy);
 			Log_Printf (LOG_DEBUG, "  Debug options = %s", levels);
 
+		} else if (!strncmp(o, "-p", 2) || !strncmp(o, "--port", 6)) {
+			char *pps, *port_string = (o[1] == 'p') ? o + 2 : o + 6;
+			/*
+			 * if the argument is not immediately followed by
+			 * the value then the value is on the next argument
+			 */
+			if (*port_string == '\0') {
+				if (opt >= argc) {
+					bad_usage(argv[0],
+						"port number not specified");
+				} else {
+					port_string = argv[opt++];
+				}
+			}
+
+			/* check that the provided port number is numeric */
+			for (pps = port_string; *pps != '\0'; pps++) {
+				if (!isdigit(*pps)) {
+					bad_usage(argv[0],
+						"invalid port number: '%s'", port_string);
+				}
+			}
+
+			/* convert port number to integer */
+			port = atoi(port_string);
+
+			/* check that it is a valid port number */
+			if (port < 1 || port > 65535) {
+				bad_usage(argv[0], "invalid port number: %i", port);
+			}
+
+			/* if a priviledged port was specified check that we
+			 * have superuser rights */
+			if (port <= 1024) {
+				if (getuid()) {
+					bad_usage(argv[0],
+						"Superuser required for binding to priviledged port %i",
+						port);
+				}
+			}
+
 		} else {
 			bad_usage (argv[0], "unrecognized option '%s'",
 				   o); // ---------->
@@ -405,7 +457,7 @@ main (int argc, char *argv[])
 	/*
 	 * Initialize client manager
 	 */
-	ClientManager_Init();
+	ClientManager_Init(port);
 
 	/*
 	 * Initialize and run fuse fs

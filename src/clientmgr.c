@@ -85,6 +85,7 @@ typedef enum
 command_t;
 
 static void *context = NULL;
+static int upnp_port = 0;
 static int abort_mon = 0;
 static pid_t mainpid = 0;
 static pthread_t monthread;
@@ -402,7 +403,7 @@ ClientManager_ClientLoop(iface_t *iface, int eventsfd, int infd, int outfd)
 
 #if defined(ENABLE_IPV6) && defined(HAVE_UPNPINIT2)
 	/* Initialize libupnp */
-	rc = UpnpInit2(iface->name, 0);
+	rc = UpnpInit2(iface->name, upnp_port);
 #else
 	char *ip = ClientManager_GetInterfaceIp(iface->name);
 	if (ip == NULL) {
@@ -411,7 +412,7 @@ ClientManager_ClientLoop(iface_t *iface, int eventsfd, int infd, int outfd)
 		rc = -1;
 		goto CLIENT_EXIT;
 	}
-	rc = UpnpInit(ip, 0);
+	rc = UpnpInit(ip, upnp_port);
 	talloc_free(ip);
 #endif
 	if (rc != UPNP_E_SUCCESS) {
@@ -1043,13 +1044,15 @@ ClientManager_MonitorInterfaces(void *arg)
  * ClientManager_Init() -- Initialize the client manager
  */
 void
-ClientManager_Init()
+ClientManager_Init(const int port)
 {
 
 	LIST_INIT(&ifaces);
 
 	mainpid = getpid();
 	context = talloc_new(NULL);
+	upnp_port = port;
+
 	if (context == NULL) {
 		Log_Printf(LOG_ERROR, "ClientManager: talloc_new() failed!");
 		return;

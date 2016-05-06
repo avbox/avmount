@@ -27,7 +27,7 @@
 #endif
 
 void
-ClientManager_Init();
+ClientManager_Init(const int port);
 
 void
 ClientManager_Stop();
