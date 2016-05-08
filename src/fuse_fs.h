@@ -36,9 +36,6 @@ FuseFS_Run(DJFS_Flags djfs_flags,
 	char *charset);
 
 void
-FuseFS_PrintVersionString(FILE *f);
-
-void
 FuseFS_Destroy(int teardown);
 
 #endif

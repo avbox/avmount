@@ -562,16 +562,6 @@ FuseFS_Run(DJFS_Flags djfs_flags, size_t search_history_size, char *charset)
 
 
 /**
- * Fuse_PrintVersionString() -- Print FUSE version string to stream
- */
-void
-FuseFS_PrintVersionString(FILE *f)
-{
-	fprintf(f, "FUSE %d.%d", FUSE_MAJOR_VERSION, FUSE_MINOR_VERSION);
-}
-
-
-/**
  * Fuse_Destroy() -- Free FUSE memory
  */
 void

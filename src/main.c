@@ -35,6 +35,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <curl/curl.h>
+#include <fuse.h>
 
 #include "talloc_util.h"
 #include "device_list.h"
@@ -186,17 +188,40 @@ version (FILE* stream, const char* progname)
 	fprintf (stream,
 		 "%s (" PACKAGE ") " VERSION "\n", progname);
 #endif
+
 	fprintf (stream, "Copyright (C) 2016 Fernando Rodriguez\n");
-	fprintf (stream, "Copyright (C) 2005 Rémi Turboult\n");
-	fprintf (stream, "Compiled against: ");
+	fprintf (stream, "Copyright (C) 2005 Rémi Turboult\n\n");
 
-	FuseFS_PrintVersionString(stream);
-
-#ifdef UPNP_VERSION_STRING
-	fprintf (stream, ", libupnp %s", UPNP_VERSION_STRING);
+	/* Build options */
+#ifdef DEBUG
+#	define OPT_DEBUG "Yes"
+#else
+#	define OPT_DEBUG "No"
+#endif
+#ifdef ENABLE_IPV6
+#	define OPT_IPV6 "Yes"
+#else
+#	define OPT_IPV6 "No"
 #endif
 
-	fputs ("\n\
+	fprintf(stream, "Compile Options\n");
+	fprintf(stream, "===============\n\n");
+	fprintf(stream, "FUSE version......%i.%i\n",
+		FUSE_MAJOR_VERSION,
+		FUSE_MINOR_VERSION);
+
+#ifdef UPNP_VERSION_STRING
+	fprintf(stream, "libupnp version...%s\n", UPNP_VERSION_STRING);
+#endif
+
+	fprintf(stream, "libcurl version...%i.%i.%i\n",
+		LIBCURL_VERSION_MAJOR,
+		LIBCURL_VERSION_MINOR,
+		LIBCURL_VERSION_PATCH);
+	fprintf(stream, "Debug.............%s\n", OPT_DEBUG);
+	fprintf(stream, "IPv6..............%s\n\n", OPT_IPV6);
+
+	fputs ("\
 This is free software. You may redistribute copies of it under the terms of\n\
 the GNU General Public License <http://www.gnu.org/licenses/gpl.html>.\n\
 There is NO WARRANTY, to the extent permitted by law.\n\
