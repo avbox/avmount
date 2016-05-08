@@ -1,4 +1,2 @@
 showmem
-autom4te.cache/*
-src/.deps/*
-gl/.libs/*
+packages/*

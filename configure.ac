@@ -299,7 +299,7 @@ AC_CHECK_FUNCS([malloc_trim])
 # git commit hash
 #
 if test x"$GIT" != x; then
-	have_repo=$($GIT log -1)
+	have_repo=$($GIT log -1 2>/dev/null)
 	if test x"$have_repo" != x; then
 		AC_MSG_CHECKING([git commit hash])
 		commit_hash="$($GIT log -1 | head -n1 | cut -d' ' -f2)"
