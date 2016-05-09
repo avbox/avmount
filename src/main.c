@@ -37,6 +37,7 @@
 #include <ctype.h>
 #include <curl/curl.h>
 #include <fuse.h>
+#include <libgen.h>
 
 #include "talloc_util.h"
 #include "device_list.h"
@@ -177,16 +178,22 @@ bad_usage (const char* progname, ...)
 static void
 version (FILE* stream, const char* progname)
 {
+	char * const avmount = "avmount";
+	char *pn = strdup(progname);
+	if (pn == NULL) {
+		pn = avmount;
+	}
 #ifdef GIT_COMMIT
 	char commit[13];
 	commit[(sizeof(commit) / sizeof(char)) - 1] = '\0';
 	memcpy(commit, STRINGIZE(GIT_COMMIT), sizeof(commit) - sizeof(char));
 	fprintf(stream,
 		"%s (" PACKAGE ") " VERSION "-%s\n",
-		progname, commit);
+		basename(pn), commit);
 #else
-	fprintf (stream,
-		 "%s (" PACKAGE ") " VERSION "\n", progname);
+	fprintf(stream,
+		 "%s (" PACKAGE ") " VERSION "\n",
+		 basename(pn));
 #endif
 
 	fprintf (stream, "Copyright (C) 2016 Fernando Rodriguez\n");
@@ -226,7 +233,12 @@ This is free software. You may redistribute copies of it under the terms of\n\
 the GNU General Public License <http://www.gnu.org/licenses/gpl.html>.\n\
 There is NO WARRANTY, to the extent permitted by law.\n\
 \n", stream);
-	exit (EXIT_SUCCESS); // ---------->
+
+	if (pn != avmount) {
+		free(pn);
+	}
+
+	exit(EXIT_SUCCESS); // ---------->
 }
 
 
