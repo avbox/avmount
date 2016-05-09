@@ -151,6 +151,52 @@ Examples:
 	./configure --with-external-talloc --with-talloc-prefix=/opt/local
 	TALLOC_CFLAGS='-I/opt/include' ./configure --with-external-talloc
 
+Ubuntu 16.04 LTS
+----------------
+
+A) To build from the git repo, run the following commands:
+
+$ sudo apt update
+$ sudo apt install \
+	build-essential \
+	git \
+	libtool \
+	autoconf \
+	autoconf-archive \
+	automake \
+	libtalloc-dev \
+	libupnp-dev \
+	libreadline-dev \
+	libcurl4-openssl-dev \
+	libfuse-dev
+$ mkdir -p ~/Projects
+$ cd ~/Projects
+$ git clone https://github.com/fernando-rodriguez/avmount
+$ cd avmount
+$ ./autogen.sh
+$ ./configure --with-systemd
+$ make
+$ sudo make install
+
+B) Or to build from a tarball:
+
+$ sudo apt update
+$ sudo apt install \
+	build-essential \
+	libtalloc-dev \
+	libupnp-dev \
+	libreadline-dev \
+	libcurl4-openssl-dev \
+	libfuse-dev
+
+$ cd /tmp
+$ tar -xf <path-to-tarball>
+$ cd avmount-<version>
+$ ./conffigure --with-systemd
+$ make
+$ sudo make install
+
+
 Usage 
 -----
 

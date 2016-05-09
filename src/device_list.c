@@ -577,12 +577,20 @@ DeviceList_EventHandlerCallback (const char *iface_name, Upnp_EventType event_ty
 				    e->ErrCode );
 		} else {
 			Log_Printf (LOG_DEBUG, 
-				    "Received Event Renewal for eventURL %s", 
+				    "Received Event Renewal for eventURL %s",
+#ifdef HAVE_UPNPSTRING_PUBLISHERURL
+				    NN(UpnpString_get_String(e->PublisherUrl)));
+#else
 				    NN(e->PublisherUrl));
+#endif
 
 			pthread_mutex_lock (&DeviceListMutex);
 
+#ifdef HAVE_UPNPSTRING_PUBLISHERURL
+			Service* const serv = GetService (UpnpString_get_String(e->PublisherUrl),
+#else
 			Service* const serv = GetService (e->PublisherUrl,
+#endif
 							  FROM_EVENT_URL);
 			if (serv) {
 				if (event_type == 
@@ -603,11 +611,19 @@ DeviceList_EventHandlerCallback (const char *iface_name, Upnp_EventType event_ty
 			(struct Upnp_Event_Subscribe*) event;
 
 		Log_Printf (LOG_DEBUG, "Renewing subscription for eventURL %s",
+#ifdef HAVE_UPNPSTRING_PUBLISHERURL
+			    NN(UpnpString_get_String(e->PublisherUrl)));
+#else
 			    NN(e->PublisherUrl));
+#endif
      
 		pthread_mutex_lock (&DeviceListMutex);
       
-		Service* const serv = GetService (e->PublisherUrl, 
+#ifdef HAVE_UPNPSTRING_PUBLISHERURL
+		Service* const serv = GetService (UpnpString_get_String(e->PublisherUrl),
+#else
+		Service* const serv = GetService (e->PublisherUrl,
+#endif
 						  FROM_EVENT_URL);
 		if (serv) 
 			Service_SubscribeEventURL (iface_name, serv);

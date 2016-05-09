@@ -158,7 +158,11 @@ UpnpUtil_GetEventString (void* talloc_context,
 				(struct Upnp_Action_Complete*) event;
 			
 			tpr (&p, "ErrCode     =  %d\n", e->ErrCode);
+#ifdef HAVE_UPNPSTRING_ACTIONCOMPLETE_CTRLURL
+			tpr (&p, "CtrlUrl     =  %s\n", NN(UpnpString_get_String(e->CtrlUrl)));
+#else
 			tpr (&p, "CtrlUrl     =  %s\n", NN(e->CtrlUrl));
+#endif
 			tpr (&p, "ActRequest  =  %s\n",
 			     XMLUtil_GetDocumentString (tmp_ctx, 
 							e->ActionRequest));
@@ -188,7 +192,11 @@ UpnpUtil_GetEventString (void* talloc_context,
 				(struct Upnp_State_Var_Complete*) event;
 			
 			tpr (&p, "ErrCode     =  %d\n", e->ErrCode);
+#ifdef HAVE_UPNPSTRING_STATEVARCOMPLETE_CTRLURL
+			tpr (&p, "CtrlUrl     =  %s\n", NN(UpnpString_get_String(e->CtrlUrl)));
+#else
 			tpr (&p, "CtrlUrl     =  %s\n", NN(e->CtrlUrl));
+#endif
 			tpr (&p, "StateVarName=  %s\n", NN(e->StateVarName));
 			tpr (&p, "CurrentVal  =  %s\n", NN(e->CurrentVal));
 		}
@@ -240,7 +248,11 @@ UpnpUtil_GetEventString (void* talloc_context,
 			
 			tpr (&p, "ErrCode     =  %d\n", e->ErrCode);
 			tpr (&p, "SID         =  %s\n", NN(e->Sid));
+#ifdef HAVE_UPNPSTRING_PUBLISHERURL
+			tpr (&p, "PublisherURL=  %s\n", NN(UpnpString_get_String(e->PublisherUrl)));
+#else
 			tpr (&p, "PublisherURL=  %s\n", NN(e->PublisherUrl));
+#endif
 			tpr (&p, "TimeOut     =  %d\n", e->TimeOut);
 		}
 		break;
@@ -253,7 +265,11 @@ UpnpUtil_GetEventString (void* talloc_context,
 			
 			tpr (&p, "ErrCode     =  %d\n", e->ErrCode);
 			tpr (&p, "SID         =  %s\n", NN(e->Sid));
+#ifdef HAVE_UPNPSTRING_PUBLISHERURL
+			tpr (&p, "PublisherURL=  %s\n", NN(UpnpString_get_String(e->PublisherUrl)));
+#else
 			tpr (&p, "PublisherURL=  %s\n", NN(e->PublisherUrl));
+#endif
 			tpr (&p, "TimeOut     =  %d\n", e->TimeOut);
 		}
 		break;

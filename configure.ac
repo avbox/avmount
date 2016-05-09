@@ -273,6 +273,106 @@ int main()
 fi
 
 #
+# Check for differences accross supported libupnp versions
+#
+CFLAGS_save="$CFLAGS"
+CFLAGS="$CFLAGS -Werror"
+AC_MSG_CHECKING([whether Upnp_Event_Subscribe.PublisherUrl is char*])
+AC_LANG([C])
+AC_COMPILE_IFELSE([
+        AC_LANG_SOURCE([[
+#include <stdlib.h>
+#include <stdio.h>
+#include <upnp/upnp.h>
+#if (!defined UPNP_VERSION) || (UPNP_VERSION < 10301)
+#       error libupnp version is too old
+#endif
+void
+StringTest(const char *s)
+{
+	printf("%s", s);
+}
+
+int main()
+{
+	struct Upnp_Event_Subscribe e;
+	StringTest(e.PublisherUrl);
+	return 0;
+}
+	]])],
+	[AC_MSG_RESULT([yes])],
+	[
+		AC_MSG_RESULT([no])
+		AC_DEFINE([HAVE_UPNPSTRING_PUBLISHERURL], 1,
+			[Define to 1 if Upnp_Event_Subscribe.PublisherUrl is char*])
+	])
+
+AC_MSG_CHECKING([whether Upnp_Action_Complete.CtrlUrl is char*])
+AC_LANG([C])
+AC_COMPILE_IFELSE([
+        AC_LANG_SOURCE([[
+#include <stdlib.h>
+#include <stdio.h>
+#include <upnp/upnp.h>
+#if (!defined UPNP_VERSION) || (UPNP_VERSION < 10301)
+#       error libupnp version is too old
+#endif
+void
+StringTest(const char *s)
+{
+	printf("%s", s);
+}
+
+int main()
+{
+	struct Upnp_Action_Complete e;
+	StringTest(e.CtrlUrl);
+	return 0;
+}
+	]])],
+	[AC_MSG_RESULT([yes])],
+	[
+		AC_MSG_RESULT([no])
+		AC_DEFINE([HAVE_UPNPSTRING_ACTIONCOMPLETE_CTRLURL], 1,
+			[Define to 1 if Upnp_Action_Complete.CtrlUrl is char*])
+	])
+
+AC_MSG_CHECKING([whether Upnp_State_Var_Complete.CtrlUrl is char*])
+AC_LANG([C])
+AC_COMPILE_IFELSE([
+        AC_LANG_SOURCE([[
+#include <stdlib.h>
+#include <stdio.h>
+#include <upnp/upnp.h>
+#if (!defined UPNP_VERSION) || (UPNP_VERSION < 10301)
+#       error libupnp version is too old
+#endif
+void
+StringTest(const char *s)
+{
+	printf("%s", s);
+}
+
+int main()
+{
+	struct Upnp_State_Var_Complete e;
+	StringTest(e.CtrlUrl);
+	return 0;
+}
+	]])],
+	[AC_MSG_RESULT([yes])],
+	[
+		AC_MSG_RESULT([no])
+		AC_DEFINE([HAVE_UPNPSTRING_STATEVARCOMPLETE_CTRLURL], 1,
+			[Define to 1 if Upnp_State_Var_Complete.CtrlUrl is char*])
+	])
+
+
+
+CFLAGS="$CFLAGS_save"
+
+
+#
 # Check if we have CheckLogFileNames in libupnp
 #
 AC_CHECK_LIB([upnp], [SetLogFileNames],
