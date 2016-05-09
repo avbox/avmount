@@ -273,6 +273,12 @@ int main()
 fi
 
 #
+# Check if we have CheckLogFileNames in libupnp
+#
+AC_CHECK_LIB([upnp], [SetLogFileNames],
+	[AC_DEFINE([HAVE_UPNP_SETLOGFILENAMES], 1, [Define to 1 if we have SetLogFileNames])])
+
+#
 # If IPv6 is enabled make sure that libupnp is ipv6 enabled
 #
 if test x"$enable_ipv6" = xyes; then

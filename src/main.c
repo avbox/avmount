@@ -103,7 +103,7 @@ stdout_print(Log_Level level, const char *msg)
  * Usage
  *****************************************************************************/
 
-#if UPNP_HAVE_DEBUG
+#ifdef HAVE_UPNP_SETLOGFILENAMES
 #    define DEBUG_DEFAULT_LEVELS	"upnpall,debug,fuse,leak"
 #else
 #    define DEBUG_DEFAULT_LEVELS	"debug,fuse,leak"
@@ -146,7 +146,7 @@ usage (FILE* stream, const char* progname)
      FUSE_ALLOWED_OPTIONS);
   fprintf(stream,
      "\nDebug levels are one or more comma separated words :\n"
-#if UPNP_HAVE_DEBUG
+#ifdef HAVE_UPNP_SETLOGFILENAMES
      "    upnperr, upnpall : increasing level of UPnP traces\n"
 #endif
      "    error, warn, info, debug : increasing level of " PACKAGE " traces\n"
@@ -288,7 +288,7 @@ main (int argc, char *argv[])
 		exit (rc); // ---------->
 	}
 	Log_Colorize (true);
-#if UPNP_HAVE_DEBUG
+#ifdef HAVE_UPNP_SETLOGFILENAMES
 	SetLogFileNames ("/dev/null", "/dev/null");
 #endif
 
@@ -387,7 +387,7 @@ main (int argc, char *argv[])
 					Log_SetMaxLevel (LOG_WARNING);
 				} else if (strncmp (s, "error", 3) == 0) {
 					Log_SetMaxLevel (LOG_ERROR);
-#if UPNP_HAVE_DEBUG
+#ifdef HAVE_UPNP_SETLOGFILENAMES
 				} else if (strcmp (s, "upnperr") == 0) {
 					SetLogFileNames ("/dev/stdout",
 							 "/dev/null");
