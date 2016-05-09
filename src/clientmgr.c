@@ -388,7 +388,7 @@ ClientManager_GetInterfaceIp(char *iface_name)
 static void
 ClientManager_ClientLoop(iface_t *iface, int eventsfd, int infd, int outfd)
 {
-	int rc = 0;
+	int rc = 0, iret;
 	ssize_t ret;
 	command_t cmd;
 
@@ -464,9 +464,9 @@ ClientManager_ClientLoop(iface_t *iface, int eventsfd, int infd, int outfd)
 			PIPE_READ_STRING(infd, eventURL);
 			PIPE_READ_VALUE(infd, timeout);
 
-			rc = UpnpSubscribe(handle, eventURL, &timeout, sid);
+			iret = UpnpSubscribe(handle, eventURL, &timeout, sid);
 
-			PIPE_WRITE_VALUE(outfd, rc);
+			PIPE_WRITE_VALUE(outfd, iret);
 			PIPE_WRITE_VALUE(outfd, timeout);
 			PIPE_WRITE_SID(outfd, sid);
 			PIPE_FREE_STRING(eventURL);
@@ -480,9 +480,9 @@ ClientManager_ClientLoop(iface_t *iface, int eventsfd, int infd, int outfd)
 			PIPE_READ_VALUE(infd, handle);
 			PIPE_READ_SID(infd, sid);
 
-			rc = UpnpUnSubscribe(handle, sid);
+			iret = UpnpUnSubscribe(handle, sid);
 
-			PIPE_WRITE_VALUE(outfd, rc);
+			PIPE_WRITE_VALUE(outfd, iret);
 			break;
 		}
 		case CMD_UPNP_SEND_ACTION:
@@ -498,10 +498,10 @@ ClientManager_ClientLoop(iface_t *iface, int eventsfd, int infd, int outfd)
 			PIPE_READ_STRING(infd, serviceType);
 			PIPE_READ_XML(infd, doc);
 
-			rc = UpnpSendAction(handle, actionURL, serviceType, NULL,
+			iret = UpnpSendAction(handle, actionURL, serviceType, NULL,
 				doc, &res);
 
-			PIPE_WRITE_VALUE(outfd, rc);
+			PIPE_WRITE_VALUE(outfd, iret);
 			PIPE_WRITE_XML(outfd, res);
 			PIPE_FREE_XML(doc);
 			PIPE_FREE_STRING(serviceType);
