@@ -565,9 +565,6 @@ ClientManager_ClientLoop(iface_t *iface, int eventsfd, int infd, int outfd)
 	}
 
 CLIENT_EXIT:
-	/* re-enable SIGTERM */
-	(void) signal(SIGTERM, SIG_DFL);
-
 	/* Unregister client */
 	if (rc == UPNP_E_SUCCESS) {
 		UpnpUnRegisterClient(iface->handle);
@@ -581,6 +578,9 @@ CLIENT_EXIT:
 	}
 
 	Log_Printf(LOG_DEBUG, "Client[%i]: Exiting", getpid());
+
+	/* re-enable SIGTERM */
+	(void) signal(SIGTERM, SIG_DFL);
 
 	/* If there was an error exit with failure status */
 	if (rc != UPNP_E_SUCCESS) {
