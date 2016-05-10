@@ -64,6 +64,9 @@ LISTABLE_TYPE(iface_t,
 	int eventsfd;
 	int infd;
 	int outfd;
+#if defined(ENABLE_IPV6) && defined(HAVE_UPNPINIT2)
+	int disable_ipv6;
+#endif
 	pid_t pid;
 	pthread_t thread;
 	pthread_mutex_t mutex;
@@ -353,7 +356,6 @@ EventHandlerCallback (Upnp_EventType event_type,
  * ClientManager_GetInterfaceIp() -- Gets the IP address of a network
  * interface
  */
-#if !defined(ENABLE_IPV6) || !defined(HAVE_UPNPINIT2)
 static char*
 ClientManager_GetInterfaceIp(char *iface_name)
 {
@@ -380,7 +382,6 @@ ClientManager_GetInterfaceIp(char *iface_name)
 	return talloc_strdup(context,
 		inet_ntoa(((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr));
 }
-#endif
 
 /**
  * This runs the UPnP client on a child process
@@ -388,7 +389,7 @@ ClientManager_GetInterfaceIp(char *iface_name)
 static void
 ClientManager_ClientLoop(iface_t *iface, int eventsfd, int infd, int outfd)
 {
-	int rc = 0, iret;
+	int rc = 0, iret, initfailed = 0;
 	ssize_t ret;
 	command_t cmd;
 
@@ -401,10 +402,26 @@ ClientManager_ClientLoop(iface_t *iface, int eventsfd, int infd, int outfd)
 	Log_Printf (LOG_INFO, "Client[%i]: Intializing UPnP client on interface %s",
 		getpid(), iface->name);
 
-#if defined(ENABLE_IPV6) && defined(HAVE_UPNPINIT2)
 	/* Initialize libupnp */
-	rc = UpnpInit2(iface->name, upnp_port);
-#else
+#if defined(ENABLE_IPV6) && defined(HAVE_UPNPINIT2)
+	/* if we have UpnpInit2() try it first */
+	if (!iface->disable_ipv6) {
+		rc = UpnpInit2(iface->name, upnp_port);
+		if (rc == UPNP_E_SUCCESS) {
+			goto UPNP_READY;	/* UpnpInit2() working! */
+		}
+		Log_Printf(LOG_ERROR, "Client[%i]: UpnpInit2(\"%s\", %i) returned %i. "
+			"IP Version 6 support will not be available!",
+			getpid(), iface->name, upnp_port, rc);
+		initfailed = 1;
+	} else {
+		Log_Printf(LOG_WARNING, "Client[%i]: The last attempt to spawn an IP Version 6 "
+			"enabled client failed. Launching IPv4-only client.", getpid());
+	}
+#endif
+
+	/* Either we don't have UpnpInit2() or it's not working,
+	 * so let's try UpnpInit() */
 	char *ip = ClientManager_GetInterfaceIp(iface->name);
 	if (ip == NULL) {
 		Log_Printf(LOG_ERROR, "ClientManager_ClientLoop(): "
@@ -414,7 +431,7 @@ ClientManager_ClientLoop(iface_t *iface, int eventsfd, int infd, int outfd)
 	}
 	rc = UpnpInit(ip, upnp_port);
 	talloc_free(ip);
-#endif
+
 	if (rc != UPNP_E_SUCCESS) {
 		Log_Printf(LOG_ERROR, "Client[%i]: UpnpInit() Error: %d",
 			getpid(), rc);
@@ -427,6 +444,9 @@ ClientManager_ClientLoop(iface_t *iface, int eventsfd, int infd, int outfd)
 		goto CLIENT_EXIT;
 	}
 
+#if defined(ENABLE_IPV6) && defined(HAVE_UPNPINIT2)
+UPNP_READY:
+#endif
 	/* register UPnP client */
 	rc = UpnpRegisterClient(EventHandlerCallback,
 		iface, &iface->handle);
@@ -584,6 +604,9 @@ CLIENT_EXIT:
 
 	/* If there was an error exit with failure status */
 	if (rc != UPNP_E_SUCCESS) {
+		if (initfailed) {
+			exit(2);
+		}
 		exit(1);
 	}
 }
@@ -757,8 +780,17 @@ ClientManager_ProxyThread(void *data)
 			abort();
 		}
 
+#if defined(ENABLE_IPV6) && defined(HAVE_UPNPINIT2)
+		if (WEXITSTATUS(ret) == 2) {
+			Log_Printf(LOG_ERROR, "ClientManager: Child exited with 2 "
+				"(UpnpInit2() failure)");
+			iface->disable_ipv6 = 1;
+		}
+		else /* ... */
+#endif
 		if (ret) {
-			Log_Printf(LOG_ERROR, "ClientManager: Child exited with %i", ret);
+			Log_Printf(LOG_ERROR, "ClientManager: Child exited with %i",
+				WEXITSTATUS(ret));
 		}
 		iface->pid = -1;
 
