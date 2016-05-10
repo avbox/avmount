@@ -1,0 +1,11 @@
+[Unit]
+Description=Mount AV devices as filesystem
+After=network.target
+
+[Service]
+Type=simple
+ExecStartPre=@MKDIR_P@ /media/UPnP
+ExecStart=@prefix@/bin/avmount @DAEMON_ARGS@ -f -p 49153 -o allow_other /media/UPnP
+
+[Install]
+WantedBy=multi-user.target

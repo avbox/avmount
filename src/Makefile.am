@@ -93,3 +93,9 @@ CLEANFILES		= IUpnpErrFile.txt IUpnpInfoFile.txt
 
 EXTRA_DIST		= test_device.sh test_vfs.sh txt2h.pl
 
+if WITH_SYSTEMD
+install-exec-hook:
+	@MKDIR_P@ $(DESTDIR)/usr/lib/systemd/system
+	@INSTALL@ avmount.service $(DESTDIR)/usr/lib/systemd/system
+endif
+

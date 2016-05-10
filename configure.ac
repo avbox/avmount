@@ -32,9 +32,12 @@ AC_ARG_ENABLE([debug], [extra debugging code])
 AM_CONDITIONAL(ENABLE_DEBUG, test x"$enable_debug" = xyes)
 if test x"$enable_debug" = xyes; then
 	AC_DEFINE([DEBUG],1,[Define to 1 to compile debug code])
+	DAEMON_ARGS="-d -l /var/log/avmount.log"
 else
 	AC_DEFINE([NDEBUG],1,[Define to 1  to disable debug code])
+	DAEMON_ARGS=""
 fi
+AC_SUBST(DAEMON_ARGS)
 
 AC_ARG_ENABLE([charset],
 	[charset conversion code and -o iocharset option (assume all UTF-8 when disabled)])
@@ -51,6 +54,8 @@ else
 	AC_DEFINE([ENABLE_IPV6],0,[Define to 1 to enable IPv6 support])
 fi
 
+AC_ARG_WITH([systemd], [Install systemd unit])
+AM_CONDITIONAL([WITH_SYSTEMD], test x"$with_systemd" = xyes)
 
 
 #
@@ -64,6 +69,7 @@ LT_INIT([disable-shared])
 AC_PROG_INSTALL
 AC_PROG_MAKE_SET
 AC_PROG_LN_S
+AC_PROG_MKDIR_P
 
 AC_PATH_PROG(PERL,perl)
 AC_PATH_PROG(GIT,git)
@@ -425,6 +431,7 @@ fi
 AC_CONFIG_FILES([Makefile
 		 gl/Makefile
                  src/Makefile
+		 src/avmount.service
                  ])
 
 AC_OUTPUT
