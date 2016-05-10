@@ -50,8 +50,6 @@ fi
 AC_ARG_ENABLE([ipv6], [IPv6 support])
 if test x"$enable_ipv6" = xyes; then
 	AC_DEFINE([ENABLE_IPV6],1,[Define to 1 to enable IPv6 support])
-else
-	AC_DEFINE([ENABLE_IPV6],0,[Define to 1 to enable IPv6 support])
 fi
 
 AC_ARG_WITH([systemd], [Install systemd unit])
