@@ -419,6 +419,14 @@ if test x"$GIT" != x; then
 		else
 			AC_MSG_RESULT([no])
 		fi
+		AC_MSG_CHECKING([git branch])
+		git_branch="$($GIT status | head -n1 | cut -d' ' -f3)"
+		if test x"$git_branch" != x; then
+			AC_MSG_RESULT([$git_branch])
+			AC_DEFINE_UNQUOTED([GIT_BRANCH], [$git_branch], [Git branch])
+		else
+			AC_MSG_RESULT([no])
+		fi
 	fi
 fi
 

@@ -188,7 +188,7 @@ version (FILE* stream, const char* progname)
 	commit[(sizeof(commit) / sizeof(char)) - 1] = '\0';
 	memcpy(commit, STRINGIZE(GIT_COMMIT), sizeof(commit) - sizeof(char));
 	fprintf(stream,
-		"%s (" PACKAGE ") " VERSION "-%s\n",
+		"%s (" PACKAGE ") " VERSION "-%s (" STRINGIZE(GIT_BRANCH) " branch)\n",
 		basename(pn), commit);
 #else
 	fprintf(stream,
