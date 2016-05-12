@@ -143,7 +143,7 @@ gl_INIT
 # ------
 #
 PKG_CHECK_MODULES(TALLOC, [talloc >= 2.1.5], ,
-	AC_MSG_ERROR('Unable to find libfuse. Please make sure library and header files are installed.'))
+	AC_MSG_ERROR('Unable to find libtalloc. Please make sure library and header files are installed.'))
 CFLAGS="$CFLAGS $TALLOC_CFLAGS"
 LDFLAGS="$LDFLAGS $TALLOC_LIBS"
 
