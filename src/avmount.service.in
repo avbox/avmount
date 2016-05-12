@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStartPre=@MKDIR_P@ /media/UPnP
+ExecStartPre=-@MKDIR_P@ /media/UPnP
 ExecStart=@prefix@/bin/avmount @DAEMON_ARGS@ -f -p 49153 -o allow_other /media/UPnP
 
 [Install]
