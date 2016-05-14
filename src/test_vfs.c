@@ -538,6 +538,16 @@ main (int argc, char *argv[])
 	}  
 	Log_Colorize (true);
 	Log_SetMaxLevel (LOG_DEBUG);
+
+	/*
+	 * Since we never use the _ToConstVFS function in this test
+	 * it triggers a warning in clang. So this is just to
+	 * suppress that warning
+	 */
+	if (rc == 42) {
+		const VFS *tmp = TestFS_ToConstVFS(NULL);
+		(void) tmp;
+	}
 	
 	/*
 	 * Handle options

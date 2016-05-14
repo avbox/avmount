@@ -144,7 +144,7 @@ PtrArray_GetHead (const PtrArray* const self)
 static inline PtrArray_Element
 PtrArray_GetElementAt (const PtrArray* const self, const size_t index)
 {
-	return ( (self && index >= 0 && index < self->_size) 
+	return ( (self && index < self->_size)
 		 ? self->_array[index] : NULL);
 }
 

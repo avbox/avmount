@@ -121,7 +121,7 @@ PtrArray_Append (PtrArray* self, PtrArray_Element element)
 bool 
 PtrArray_InsertAt (PtrArray* self, PtrArray_Element element, size_t i)
 {
-	if (self == NULL || i < 0)
+	if (self == NULL)
 		return false; // ---------->
 
 	if (i >= self->_size)
@@ -163,7 +163,7 @@ PtrArray_GetElementIndex (const PtrArray* self, PtrArray_Element element)
 PtrArray_Element
 PtrArray_RemoveAt (PtrArray* self, size_t i)
 {
-	if (self == NULL || i < 0 || i >= self->_size)
+	if (self == NULL || i >= self->_size)
 		return NULL; // ---------->
 
 	PtrArray_Element const element = self->_array[i];
@@ -185,7 +185,7 @@ PtrArray_RemoveAt (PtrArray* self, size_t i)
 PtrArray_Element
 PtrArray_RemoveAtReorder (PtrArray* self, size_t i)
 {
-	if (self == NULL || i < 0 || i >= self->_size)
+	if (self == NULL || i >= self->_size)
 		return NULL; // ---------->
 
 	PtrArray_Element const element = self->_array[i];

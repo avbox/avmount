@@ -391,7 +391,7 @@ ClientManager_ClientLoop(iface_t *iface, int eventsfd, int infd, int outfd)
 {
 	int rc = 0, iret, initfailed = 0;
 	ssize_t ret;
-	command_t cmd;
+	command_t cmd = -1;
 
 	/* ignore SIGTERM */
 	(void) signal(SIGTERM, SIG_IGN);

@@ -5,7 +5,8 @@
 
 #define TEST_URL "https://ftp.gnu.org/gnu/aspell/aspell-0.50.5.tar.gz"
 
-static const unsigned char const sig[] =
+#if 0
+static const unsigned char sig[] =
 {
 	0x88, 0x3f, 0x03, 0x05, 0x00, 0x40, 0x29, 0x9c, 0x79, 0xb6, 0xd9, 0xd0,
 	0xcc, 0x38, 0xb3, 0x27, 0xd7, 0x11, 0x02, 0xf1, 0xca, 0x00, 0x9c, 0x0a,
@@ -17,7 +18,7 @@ static const unsigned char const sig[] =
 
 static const unsigned int sig_len = 65;
 /* static unsigned char buf[1024 * 1024 * 2]; */
-
+#endif
 
 int
 main()
