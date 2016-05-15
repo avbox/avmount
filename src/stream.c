@@ -335,7 +335,7 @@ Stream_FillBuffer(Stream *file, char *buffer, size_t size)
 		FD_ZERO(&fdexcep);
 
 		/* set a suitable timeout to fail on */
-		timeout.tv_sec = 60;
+		timeout.tv_sec = 5;
 		timeout.tv_usec = 0;
 		curl_multi_timeout(file->multi_handle, &curl_timeo);
 		if(curl_timeo >= 0) {
