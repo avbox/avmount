@@ -872,27 +872,8 @@ ClientManager_AddInterface(char *name)
 static void
 ClientManager_RemoveInterface(iface_t *entry)
 {
-	const command_t cmd = CMD_EXIT;
-
 	Log_Printf(LOG_INFO, "ClientManager: Shutting down UPnP client on interface: %s",
 		entry->name);
-
-	/*
-	 * if the child process is running send it the EXIT command
-	 * and wait for it to exit (we'll know it exited when it's
-	 * proxy thread exits).
-	 */
-	if (entry->pid != -1) {
-		pthread_mutex_lock(&entry->mutex);
-		if (entry->pid != -1) {
-			PIPE_WRITE_VALUE(entry->infd, cmd);
-			pthread_mutex_unlock(&entry->mutex);
-			pthread_join(entry->thread, NULL);
-			Log_Printf(LOG_DEBUG, "ClientManager_RemoveInterface() -- Client thread joined.");
-		} else {
-			pthread_mutex_unlock(&entry->mutex);
-		}
-	}
 
 	/* remove from list and destroy */
 	pthread_mutex_lock(&entry->mutex);
@@ -910,7 +891,20 @@ ClientManager_FindInterface(const char *name, int locked)
 {
 	iface_t *ent;
 	if (!locked) {
+#if 0
+		int ret, i = 0;
+		struct timespec tv;
+		tv.tv_sec = 0;
+		tv.tv_nsec = 100 * 1000000L;
+		while (i++ < 15 && (ret = pthread_mutex_trylock(&list_lock)) != 0) {
+			nanosleep(&tv, NULL);
+		}
+		if (ret != 0) {
+			return NULL;
+		}
+#else
 		pthread_mutex_lock(&list_lock);
+#endif
 	}
 	LIST_FOREACH(iface_t*, ent, &ifaces) {
 		if (!strcmp(name, ent->name)) {
@@ -949,10 +943,31 @@ static void
 ClientManager_Cleanup()
 {
 	iface_t *ent;
+	command_t cmd = CMD_EXIT;
+CLEANUP_RESTART:
 	pthread_mutex_lock(&list_lock);
 	LIST_FOREACH_SAFE(iface_t*, ent, &ifaces, {
 		if (!ent->keep) {
 			ClientManager_RemoveInterface(ent);
+
+			/*
+			 * if the child process is running send it the EXIT command
+			 * and wait for it to exit (we'll know it exited when it's
+			 * proxy thread exits).
+			 */
+			if (ent->pid != -1) {
+				pthread_mutex_unlock(&list_lock);
+				pthread_mutex_lock(&ent->mutex);
+				if (ent->pid != -1) {
+					PIPE_WRITE_VALUE(ent->infd, cmd);
+					pthread_mutex_unlock(&ent->mutex);
+					pthread_join(ent->thread, NULL);
+					Log_Printf(LOG_DEBUG, "ClientManager_RemoveInterface() -- Client thread joined.");
+				} else {
+					pthread_mutex_unlock(&ent->mutex);
+				}
+				goto CLEANUP_RESTART;
+			}
 		}
 	});
 	pthread_mutex_unlock(&list_lock);
