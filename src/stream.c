@@ -472,6 +472,7 @@ Stream_Seek(Stream *file, off_t offset)
 			pthread_mutex_unlock(&file->ra_lock);
 			while (UNLIKELY(file->ra_seekto != -1)) {
 				pthread_mutex_lock(&file->ra_lock);
+				pthread_cond_signal(&file->ra_signal);
 				if (LIKELY(file->ra_seekto != -1)) {
 					pthread_cond_wait(&file->ra_signal, &file->ra_lock);
 				}
