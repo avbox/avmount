@@ -324,7 +324,11 @@ Stream_FillBuffer(Stream *file, char *buffer, size_t size)
 				return cbdata.avail;
 			}
 		}
+		if (cbdata.rem == 0) {
+			return cbdata.avail;
+		}
 	}
+
 
 	do {
 		int maxfd = -1;
