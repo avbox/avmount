@@ -35,6 +35,8 @@ Roadmap
 
 0.81
    handle duplicate filenames inside a directory
+   use asynchronous UPnP calls when possible since with the multi-process
+     model of avmount only one call can be made at a time per UPnP client
 
 0.90
    add extended attributes
