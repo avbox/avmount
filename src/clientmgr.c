@@ -28,6 +28,7 @@
 #include <stdarg.h>
 #include <assert.h>
 #include <errno.h>
+#include <setjmp.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -101,6 +102,8 @@ int
 DeviceList_EventHandlerCallback(
 	const char* iface_name, Upnp_EventType event_type,
 	void* event, void* cookie);
+
+jmp_buf TimeoutJmpBuf;
 
 /*
  * Maximum permissible content-length for SOAP messages, in bytes
@@ -383,6 +386,15 @@ ClientManager_GetInterfaceIp(char *iface_name)
 		inet_ntoa(((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr));
 }
 
+static void
+sigalarm_handler(void)
+{
+	extern jmp_buf TimeoutJmpBuf;
+
+	longjmp(TimeoutJmpBuf, (int)1);
+}
+
+
 /**
  * This runs the UPnP client on a child process
  */
@@ -590,8 +602,20 @@ CLIENT_EXIT:
 		UpnpUnRegisterClient(iface->handle);
 	}
 
+	/* Temporarily workaround deadlock bug */
+	(void) signal(SIGALRM, (void(*)()) sigalarm_handler);
+	(void) alarm(10);
+	if (setjmp(TimeoutJmpBuf) != 0) {
+		Log_Printf(LOG_ERROR, "Client[%i]: BUG: UpnpFinish() deadlocked!",
+			getpid());
+		goto ALL_SYSTEMS_DOWN;
+	}
+
 	/* Shutdown UPnP SDK */
 	UpnpFinish();
+
+ALL_SYSTEMS_DOWN:
+	(void) signal(SIGALRM, SIG_DFL);
 
 	if (cmd == CMD_EXIT) {
 		pthread_mutex_unlock(&iface->event_lock);
