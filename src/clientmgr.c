@@ -72,6 +72,7 @@ LISTABLE_TYPE(iface_t,
 	pthread_t thread;
 	pthread_mutex_t mutex;
 	pthread_mutex_t event_lock;
+	pthread_cond_t ready;
 	UpnpClient_Handle handle;
 );
 
@@ -104,6 +105,9 @@ DeviceList_EventHandlerCallback(
 	void* event, void* cookie);
 
 jmp_buf TimeoutJmpBuf;
+
+
+#define CLIENT_STARTUP_MAGIC (0x4242)
 
 /*
  * Maximum permissible content-length for SOAP messages, in bytes
@@ -479,6 +483,10 @@ UPNP_READY:
 	 */
 	UpnpSetMaxContentLength(MAX_CONTENT_LENGTH);
 
+	/* signaling parent process that we're ready */
+	const int magic = CLIENT_STARTUP_MAGIC;
+	write_or_die(eventsfd, &magic, sizeof(int));
+
 	/* process commands from main process */
 	while ((ret = read_or_eof(infd, &cmd, sizeof(command_t)))) {
 
@@ -788,8 +796,31 @@ ClientManager_ProxyThread(void *data)
 		iface->infd = writefd[1];
 		iface->outfd = readfd[0];
 
-		/* run proxy */
-		ClientManager_ProxyLoop(iface, eventsfd[0]);
+		/* start the proxy loop only after the client signaled that it's ready */
+		ret = 0;
+		if (read_or_eof(iface->eventsfd, &ret, sizeof(int)) == 0) {
+			Log_Printf(LOG_ERROR, "ClientManager_ProxyThread: Client closed pipe unexpectedly");
+		}
+		if (ret == CLIENT_STARTUP_MAGIC) {
+			/* signal parent thread that the parennt has started */
+			pthread_mutex_lock(&iface->mutex);
+			iface->keep = 1;
+			pthread_cond_signal(&iface->ready);
+			pthread_mutex_unlock(&iface->mutex);
+
+			/* run proxy */
+			ClientManager_ProxyLoop(iface, eventsfd[0]);
+
+		} else {
+			Log_Printf(LOG_ERROR, "ClientManager_ProxyThread: Client startup failed (ret=%i)", ret);
+
+			/* signal parent thread that the client failed to start */
+			pthread_mutex_lock(&iface->mutex);
+			iface->keep = 0;
+			pthread_cond_signal(&iface->ready);
+			pthread_mutex_unlock(&iface->mutex);
+		}
+
 
 		/* wait for child to exit */
 		while (waitpid(pid, &ret, 0) == -1) {
@@ -831,24 +862,28 @@ ClientManager_ProxyThread(void *data)
 /**
  * ClientManager_RunClient() -- Runs a client on interface
  */
-static void
+static int
 ClientManager_RunClient(iface_t *iface)
 {
-	if (pthread_mutex_init(&iface->event_lock, NULL) != 0) {
-		Log_Printf(LOG_ERROR, "ClientManager: Mutex initialization failed!");
+	if (pthread_mutex_init(&iface->event_lock, NULL) != 0 ||
+		pthread_mutex_init(&iface->mutex, NULL) != 0 ||
+		pthread_cond_init(&iface->ready, NULL) != 0) {
+		Log_Printf(LOG_ERROR, "ClientManager: Pthreads setup failed!");
 		iface->pid = -1;
-	}
-		
-	if (pthread_mutex_init(&iface->mutex, NULL) != 0) {
-		Log_Printf(LOG_ERROR, "ClientManager: Mutex initialization failed!");
-		iface->pid = -1;
+		return -1;
 	}
 
 	/* fire the proxy thread */
+	pthread_mutex_lock(&iface->mutex);
 	if (pthread_create(&iface->thread, NULL, ClientManager_ProxyThread, (void*) iface) == -1) {
 		Log_Printf(LOG_ERROR, "ClientManager: pthread_create() failed");
+		pthread_mutex_unlock(&iface->mutex);
 		iface->pid = -1;
+		return -1;
 	}
+	pthread_cond_wait(&iface->ready, &iface->mutex);
+	pthread_mutex_unlock(&iface->mutex);
+	return (iface->keep == 1) ? 0 : -1;
 }
 
 /**
@@ -873,7 +908,7 @@ ClientManager_AddInterface(char *name)
 #endif
 
 	iface->name = talloc_strdup(iface, name);
-	iface->keep = 1;
+	iface->keep = 0;
 
 	if (iface->name == NULL) {
 		talloc_free(iface);
@@ -881,7 +916,11 @@ ClientManager_AddInterface(char *name)
 	}
 
 	/* start the client */
-	ClientManager_RunClient(iface);
+	if (ClientManager_RunClient(iface) == -1) {
+		Log_Printf(LOG_ERROR, "ClientManager_RunClient() failed");
+		talloc_free(iface);
+		return -1;
+	}
 
 	/* add interface to list */
 	LIST_ADD(&ifaces, iface);
