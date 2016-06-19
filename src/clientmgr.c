@@ -55,6 +55,8 @@
 #include "fuse_fs.h"
 #include "linkedlist.h"
 #include "string_util.h"
+#include "iface_util.h"
+
 
 /*
  * Structure used to represent a network interface
@@ -94,7 +96,6 @@ static int upnp_port = 0;
 static int abort_mon = 0;
 static pid_t mainpid = 0;
 static pthread_t monthread;
-static DIR* dir;
 
 LIST_DECLARE_STATIC(ifaces);
 static pthread_mutex_t list_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -359,36 +360,6 @@ EventHandlerCallback (Upnp_EventType event_type,
 	return 0;
 }
 
-/**
- * ClientManager_GetInterfaceIp() -- Gets the IP address of a network
- * interface
- */
-static char*
-ClientManager_GetInterfaceIp(char *iface_name)
-{
-
-	int fd;
-	struct ifreq ifr;
-
-	ifr.ifr_addr.sa_family = AF_INET;
-	strncpy(ifr.ifr_name, iface_name, IFNAMSIZ-1);
-
-	if ((fd = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
-		Log_Printf(LOG_ERROR, "ClientManager_GetInterfaceIp(): socket() failed (errno=%i)",
-			errno);
-		return NULL;
-	}
-	if (ioctl(fd, SIOCGIFADDR, &ifr) == -1) {
-		Log_Printf(LOG_ERROR, "ClientManager_GetInterfaceIp(): ioctl() failed (errno=%i)",
-			errno);
-		return NULL;
-	}
-
-	close(fd);
-
-	return talloc_strdup(context,
-		inet_ntoa(((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr));
-}
 
 static void
 sigalarm_handler(void)
@@ -438,7 +409,7 @@ ClientManager_ClientLoop(iface_t *iface, int eventsfd, int infd, int outfd)
 
 	/* Either we don't have UpnpInit2() or it's not working,
 	 * so let's try UpnpInit() */
-	char *ip = ClientManager_GetInterfaceIp(iface->name);
+	char *ip = ifaceutil_getip(iface->name);
 	if (ip == NULL) {
 		Log_Printf(LOG_ERROR, "ClientManager_ClientLoop(): "
 			"Could not get IP for interface '%s'", iface->name);
@@ -446,7 +417,7 @@ ClientManager_ClientLoop(iface_t *iface, int eventsfd, int infd, int outfd)
 		goto CLIENT_EXIT;
 	}
 	rc = UpnpInit(ip, upnp_port);
-	talloc_free(ip);
+	free(ip);
 
 	if (rc != UPNP_E_SUCCESS) {
 		Log_Printf(LOG_ERROR, "Client[%i]: UpnpInit() Error: %d",
@@ -891,7 +862,7 @@ ClientManager_RunClient(iface_t *iface)
  * list and launches a child process.
  */
 static int
-ClientManager_AddInterface(char *name)
+ClientManager_AddInterface(const char * const name)
 {
 	iface_t *iface;
 
@@ -1056,6 +1027,32 @@ ClientManager_CheckClients()
 	pthread_mutex_unlock(&list_lock);
 }
 
+
+/**
+ * ClientManager_EnumInterfacesCallback()
+ */
+static int
+ClientManager_EnumInterfacesCallback(const char * const iface_name, void *data)
+{
+	iface_t *ent;
+	if (!strcmp(iface_name, "lo")) {
+		return 0;
+	}
+	if ((ent = ClientManager_FindInterface(iface_name, 0)) == NULL) {
+		pthread_mutex_lock(&list_lock);
+		if ((ent = ClientManager_FindInterface(iface_name, 1)) == NULL) {
+			ClientManager_AddInterface(iface_name);
+		} else {
+			ent->keep = 1;
+		}
+		pthread_mutex_unlock(&list_lock);
+	} else {
+		ent->keep = 1;
+	}
+	return 0;
+}
+
+
 /**
  * ClientManager_MonitorInterfaces() -- Monitors network interfaces and
  * launches and monitors a child process to listen
@@ -1064,91 +1061,18 @@ ClientManager_CheckClients()
 static void*
 ClientManager_MonitorInterfaces(void *arg)
 {
-	const char * const sysfs_net = "/sys/class/net";
-
 	(void) arg;
 
 	while (abort_mon == 0) {
-		dir = opendir(sysfs_net);
-		if (dir == NULL) {
-			sleep(2);
-			continue;
-		}
 		ClientManager_CleanupInit();
-		struct dirent *dp;
-		while ((dp = readdir(dir)) != NULL) {
-			int fd;
-			char name[PATH_MAX];
-			iface_t *ent;
-
-			/* ignore loopback interface and dot files */
-			if (dp->d_name[0] == '.' || !strcmp("lo", dp->d_name)) {
-				continue;
-			}
-
-			/*
-			 * Ignore sit interfaces.
-			 * TODO: Find a better way to detect usable
-			 * interfaces
-			 */
-			if (!memcmp("sit", dp->d_name, 3 * sizeof(char))) {
-				continue;
-			}
-
-			/* check operstate */
-			(void) snprintf(name, PATH_MAX, "/sys/class/net/%s/operstate", dp->d_name);
-			if ((fd = open(name, O_RDONLY)) == -1) {
-				Log_Printf(LOG_ERROR, "ClientManager: Could not open %s", name);
-				continue;
-			}
-			if (read(fd, name, PATH_MAX) == -1) {
-				Log_Printf(LOG_ERROR, "ClientManager: Could not operstate");
-				close(fd);
-				continue;
-			}
-			close(fd);
-
-			/* operstate is "unkown" on tunnel interfaces */
-			if (memcmp(name, "up", sizeof("up") - 1) &&
-				memcmp(name, "unknown", sizeof("unknown") - 1)) {
-				continue;
-			}
-
-			/* check carrier */
-			(void) snprintf(name, PATH_MAX, "/sys/class/net/%s/carrier", dp->d_name);
-			if ((fd = open(name, O_RDONLY)) == -1) {
-				Log_Printf(LOG_ERROR, "ClientManager: Could not open %s", name);
-				continue;
-			}
-			if (read(fd, name, PATH_MAX) == -1) {
-				Log_Printf(LOG_ERROR, "ClientManager: Could not operstate");
-				close(fd);
-				continue;
-			}
-			close(fd);
-			if (name[0] != '1') {
-				continue;
-			}
-
-			if ((ent = ClientManager_FindInterface(dp->d_name, 0)) == NULL) {
-				pthread_mutex_lock(&list_lock);
-				if ((ent = ClientManager_FindInterface(dp->d_name, 1)) == NULL) {
-					ClientManager_AddInterface(dp->d_name);
-				} else {
-					ent->keep = 1;
-				}
-				pthread_mutex_unlock(&list_lock);
-			} else {
-				ent->keep = 1;
-			}
-		}
-		closedir(dir);
+		ifaceutil_enumifaces(ClientManager_EnumInterfacesCallback, NULL);
 		ClientManager_Cleanup();
 		sleep(POLL_INTERVAL);
 		ClientManager_CheckClients();
 	}
 	return NULL;
 }
+
 
 /**
  * ClientManager_Init() -- Initialize the client manager
