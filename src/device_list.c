@@ -79,6 +79,7 @@ static pthread_mutex_t DeviceListMutex = PTHREAD_MUTEX_INITIALIZER;
  */
 LISTABLE_TYPE(DeviceNode,
 	char*    deviceId; // as reported by the discovery callback
+	char*    descLocation;
 	Device*  d;
 	int      expires;
 );
@@ -296,7 +297,21 @@ AddDevice (const char *iface, const char* deviceId,
 			    "AddDevice Id=%s already exists, update only",
 			    NN(deviceId));
 		devnode->expires = expires;
-	} else {
+
+		/* if this is a local service but we're connected to it through
+		 * a non loopback interface remove the old one and add this one.
+		 * In other words, give preference to local connections. */
+		if (strstr(descLocation, "127.0.0.1")) {
+			if (strcmp(descLocation, devnode->descLocation)) {
+				pthread_mutex_unlock(&DeviceListMutex);
+				DeviceList_RemoveDevice(devnode->deviceId);
+				devnode = NULL;
+				pthread_mutex_lock(&DeviceListMutex);
+			}
+		}
+	}
+
+	if (devnode == NULL) {
 		// Else create a new device
 		Log_Printf (LOG_DEBUG, "AddDevice try new device Id=%s", 
 			    NN(deviceId));
@@ -382,18 +397,15 @@ AddDevice (const char *iface, const char* deviceId,
 			// while the list was unlocked)
 			pthread_mutex_lock (&DeviceListMutex);
 			if (GetDeviceListNodeFromId(deviceId) != NULL) {
-				Log_Printf (LOG_WARNING, 
-					    "Device Id=%s already added",
-					    NN(deviceId));
 				// Delete extraneous device descriptor. Note:
 				// service subscription is not yet done, so 
 				// the Service destructors will not unsubscribe
 				talloc_free (devnode);
 			} else {
-				devnode->deviceId = talloc_strdup (devnode,
-																					 deviceId);
-				if (devnode->deviceId == NULL) {
-					Log_Printf(LOG_ERROR, "Could not allocate deviceId");
+				devnode->deviceId = talloc_strdup(devnode, deviceId);
+				devnode->descLocation = talloc_strdup(devnode, descLocation);
+				if (devnode->deviceId == NULL || devnode->descLocation == NULL) {
+					Log_Printf(LOG_ERROR, "AddDevice() failed. Out of memory");
 					pthread_mutex_unlock (&DeviceListMutex);
 					talloc_free (devnode);
 					return;
