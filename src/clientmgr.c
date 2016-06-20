@@ -94,6 +94,7 @@ command_t;
 static void *context = NULL;
 static int upnp_port = 0;
 static int abort_mon = 0;
+static int lobind = 0;
 static pid_t mainpid = 0;
 static pthread_t monthread;
 
@@ -1035,7 +1036,7 @@ static int
 ClientManager_EnumInterfacesCallback(const char * const iface_name, void *data)
 {
 	iface_t *ent;
-	if (!strcmp(iface_name, "lo")) {
+	if (!lobind && !strcmp(iface_name, "lo")) {
 		return 0;
 	}
 	if ((ent = ClientManager_FindInterface(iface_name, 0)) == NULL) {
@@ -1078,11 +1079,12 @@ ClientManager_MonitorInterfaces(void *arg)
  * ClientManager_Init() -- Initialize the client manager
  */
 void
-ClientManager_Init(const int port)
+ClientManager_Init(const int port, const int enable_lobind)
 {
 
 	LIST_INIT(&ifaces);
 
+	lobind = enable_lobind;
 	mainpid = getpid();
 	context = talloc_new(NULL);
 	upnp_port = port;
@@ -1101,6 +1103,7 @@ ClientManager_Init(const int port)
 		abort();
 	}
 }
+
 
 void
 ClientManager_Stop()

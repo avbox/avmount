@@ -128,6 +128,7 @@ usage (FILE* stream, const char* progname)
      "Options:\n"
      "    -h or --help           print this help, then exit\n"
      "    --version              print version number, then exit\n"
+     "    --lobind               bind UPnP clients to all interfaces, including loopback\n"
      "    -o [options]           mount options (see below)\n"
      "    -p [port]              specify port number\n"
      "    -d[levels]             enable debug output (implies -f)\n"
@@ -249,7 +250,7 @@ There is NO WARRANTY, to the extent permitted by law.\n\
 int
 main (int argc, char *argv[])
 {
-	int rc;
+	int rc, lobind = 0;
 	bool background = true;
 
 	/* Create a working context for temporary strings */
@@ -318,6 +319,9 @@ main (int argc, char *argv[])
 
 		} else if (strcmp (o, "--version") == 0) {
 			version (stdout, argv[0]); // ---------->
+
+		} else if (strcmp(o, "--lobind") == 0) {
+			lobind = 1;
 
 		} else if (strcmp(o, "-f") == 0) {
 			background = false;
@@ -494,7 +498,7 @@ main (int argc, char *argv[])
 	/*
 	 * Initialize client manager
 	 */
-	ClientManager_Init(port);
+	ClientManager_Init(port, lobind);
 
 	/*
 	 * Initialize and run fuse fs

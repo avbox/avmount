@@ -27,7 +27,7 @@
 #endif
 
 void
-ClientManager_Init(const int port);
+ClientManager_Init(const int port, const int enable_lobind);
 
 void
 ClientManager_Stop();
