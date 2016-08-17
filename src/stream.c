@@ -48,6 +48,7 @@
 #define READAHEAD_TRESHOLD	(5)
 #define READAHEAD_FSEEK_MAX   	(64 * KB)
 #define RETRIES_MAX		(3)
+/* #define ENABLE_CURL_TALLOC	(1) */
 
 /* Macros for optimizing likely branches */
 #define LIKELY(x)		(__builtin_expect(!!(x), 1))
@@ -103,6 +104,7 @@ struct _Stream_CallbackData
 /*
  * cURL memory allocation functions
  */
+#ifdef ENABLE_CURL_TALLOC
 static void*
 curl_malloc_func(size_t size)
 {
@@ -152,6 +154,7 @@ curl_calloc_func(size_t nmemb, size_t size)
 #endif
 	return ret;
 }
+#endif
 
 /**
  * Stream_AddToList() -- Add stream to list.
@@ -402,12 +405,14 @@ Stream_Init()
 		Log_Print(LOG_ERROR, "Stream_Init() -- Out of memory");
 		exit(1);
 	}
+#ifdef ENABLE_CURL_TALLOC
 	curl_global_init_mem(CURL_GLOBAL_DEFAULT,
 		curl_malloc_func,
 		curl_free_func,
 		curl_realloc_func,
 		curl_strdup_func,
 		curl_calloc_func);
+#endif
 }
 
 /**
