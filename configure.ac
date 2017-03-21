@@ -22,6 +22,7 @@ AC_CONFIG_HEADERS(config.h)
 
 AC_COPYRIGHT([Copyright (C) 2005 Rémi Turboult])
 AC_REVISION([$Revision: 266 $])
+PKG_PROG_PKG_CONFIG
 
 #
 # --enable-FEATURE flags
@@ -52,6 +53,9 @@ if test x"$enable_ipv6" = xyes; then
 	AC_DEFINE([ENABLE_IPV6],1,[Define to 1 to enable IPv6 support])
 fi
 
+AC_ARG_WITH([bundled-talloc], [Use bundled talloc library])
+AM_CONDITIONAL(BUNDLED_TALLOC, test x"$with_bundled_talloc" = xyes)
+
 AC_ARG_WITH([systemd], [Install systemd unit])
 AM_CONDITIONAL([WITH_SYSTEMD], test x"$with_systemd" = xyes)
 
@@ -74,8 +78,6 @@ AC_PATH_PROG(GIT,git)
 
 # for pkg_config
 export PKG_CONFIG_PATH=$PKG_CONFIG_PATH:/usr/local/lib/pkgconfig
-
-
 
 #
 # Default compilation flags
@@ -136,16 +138,25 @@ AC_CHECK_FUNCS([open_memstream], [AC_DEFINE([_GNU_SOURCE])])
 # see http://lists.gnu.org/archive/html/bug-gnulib/2005-08/msg00241.html
 gl_INIT
 
-
-
 #
 # talloc 
 # ------
 #
-PKG_CHECK_MODULES(TALLOC, [talloc >= 2.1.5], ,
-	AC_MSG_ERROR('Unable to find libtalloc. Please make sure library and header files are installed.'))
-CFLAGS="$CFLAGS $TALLOC_CFLAGS"
-LDFLAGS="$LDFLAGS $TALLOC_LIBS"
+AC_CHECK_HEADERS([limits.h])
+AC_CHECK_FUNC([strerror], AC_DEFINE([HAVE_STRERROR], 1, [Have strerror]))
+AC_CHECK_FUNCS([usleep strnlen memmove], [], [])
+AC_CHECK_TYPES([intptr_t, uintptr_t], [], [], [[#include <stdint.h>]])
+AC_CHECK_TYPES([ptrdiff_t], [], [], [[#include <stddef.h>]])
+AC_CHECK_TYPES([useconds_t], [], [], [[#include <sys/types.h>]])
+AC_CHECK_TYPES([bool], [], [], [[#include <stdbool.h>]])
+AC_DEFINE([HAVE_VA_COPY], 1, [Define to one if you have va_copy])
+AC_DEFINE([HAVE_VSNPRINTF], 1, [Define to one if you have C99 fprintf])
+AC_DEFINE([HAVE_C99_VSNPRINTF], 1, [Define to one if you have C99 fprintf])
+if test x"$with_bundled_talloc" != xyes; then
+	PKG_CHECK_MODULES(TALLOC, [talloc >= 2.1.5], , AM_CONDITIONAL(BUNDLED_TALLOC, test xyes = xyes))
+	CFLAGS="$CFLAGS $TALLOC_CFLAGS"
+	LDFLAGS="$LDFLAGS $TALLOC_LIBS"
+fi
 
 if false; then
 AC_MSG_CHECKING([whether talloc works])

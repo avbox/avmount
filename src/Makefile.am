@@ -21,7 +21,8 @@
 #
 
 AM_CFLAGS		= -I$(top_srcdir)/gl \
-			  $(TALLOC_CFLAGS) $(LIBUPNP_CFLAGS) $(FUSE_CFLAGS) 
+			  $(TALLOC_CFLAGS) $(LIBUPNP_CFLAGS) $(FUSE_CFLAGS) \
+			  -std=gnu99
 
 LDADD			= -L$(top_builddir)/gl -lgnu \
 			  $(TALLOC_LIBS) $(LIBUPNP_LIBS) $(FUSE_LIBS) 
@@ -51,6 +52,10 @@ if ENABLE_CHARSET
 if !WANT_ICONV
     COMMON_SRCS 	+= charset_internal.c
 endif
+endif
+if BUNDLED_TALLOC
+    COMMON_SRCS		+= talloc.c
+    AM_CFLAGS 		+= -Italloc
 endif
 
 noinst_HEADERS		= \

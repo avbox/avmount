@@ -38,6 +38,7 @@
 #include <curl/curl.h>
 #include <fuse.h>
 #include <libgen.h>
+#include <signal.h>
 
 #include "talloc_util.h"
 #include "device_list.h"
