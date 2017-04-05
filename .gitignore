@@ -20,7 +20,11 @@ src/avmount.service
 src/search_help.h
 src/test_upnp
 configure
-config.*
+config.h*
+config.guess
+config.log
+config.status
+config.sub
 Makefile
 Makefile.in
 stamp-h1
