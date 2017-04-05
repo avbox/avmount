@@ -459,9 +459,15 @@ DeviceList_EventHandlerCallback (const char *iface_name, Upnp_EventType event_ty
 
 	// Create a working context for temporary strings
 	void* const tmp_ctx = talloc_new (NULL);
+	if (tmp_ctx == NULL) {
+		Log_Printf(LOG_ERROR,  "DeviceList_EventHandlerCallback() -- "
+			"Could not allocate temp talloc context!");
+		return 0;
+	}
 
 	UpnpClient_Handle handle = *((UpnpClient_Handle*) cookie);
 
+	Log_Printf(LOG_DEBUG, "Created temp context %p", tmp_ctx);
 	Log_Printf(LOG_DEBUG, "Received event from %s (handle=%lu)",
 		iface_name, (unsigned long) handle);
 	Log_Print (LOG_DEBUG, UpnpUtil_GetEventString (tmp_ctx, event_type, 
@@ -481,27 +487,25 @@ DeviceList_EventHandlerCallback (const char *iface_name, Upnp_EventType event_ty
 			Log_Printf (LOG_ERROR, 
 				    "Error in Discovery Callback -- %d", 
 				    e->ErrCode);	
-		}
-		// TBD else ??
-
-		/*
-		 * If this is an adverstisement for a device with a
-		 * ContentDirectory service then attempt to add the
-		 * device.
-		 */
-		if (!memcmp("urn:schemas-upnp-org:service:ContentDirectory", e->ServiceType, 45)) {
-			if (e->DeviceId && e->DeviceId[0]) {
-				Log_Printf (LOG_DEBUG,
-					"Discovery : device type '%s' "
-					"OS '%s' at URL '%s'", NN(e->DeviceType),
-					NN(e->Os), NN(e->Location));
-				AddDevice (iface_name, e->DeviceId, e->Location, e->Expires, handle);
-				Log_Printf (LOG_DEBUG, "Discovery: "
-					"DeviceList after AddDevice = \n%s",
-					DeviceList_GetStatusString (tmp_ctx));
+		} else if (e->ServiceType != NULL) {
+			/* If this is an adverstisement for a device with a
+			 * ContentDirectory service then attempt to add the
+			 * device.
+			 */
+			const char * const type = "urn:schemas-upnp-org:service:ContentDirectory";
+			if (!strncmp(type, e->ServiceType, sizeof(type) - 1)) {
+				if (e->DeviceId && e->DeviceId[0]) {
+					Log_Printf (LOG_DEBUG,
+						"Discovery : device type '%s' "
+						"OS '%s' at URL '%s'", NN(e->DeviceType),
+						NN(e->Os), NN(e->Location));
+					AddDevice (iface_name, e->DeviceId, e->Location, e->Expires, handle);
+					/* Log_Printf (LOG_DEBUG, "Discovery: "
+						"DeviceList after AddDevice = \n%s",
+						DeviceList_GetStatusString (tmp_ctx)); */
+				}
 			}
 		}
-		
 		break;
 	}
     
@@ -566,7 +570,6 @@ DeviceList_EventHandlerCallback (const char *iface_name, Upnp_EventType event_ty
 	case UPNP_EVENT_RECEIVED:
 	{
 		struct Upnp_Event* e = (struct Upnp_Event*) event;
-		
 		HandleEvent (e->Sid, e->EventKey, e->ChangedVariables);
 		break;
 	}
@@ -583,11 +586,13 @@ DeviceList_EventHandlerCallback (const char *iface_name, Upnp_EventType event_ty
 				    "Error in Event Subscribe Callback -- %d",
 				    e->ErrCode );
 		} else {
-			Log_Printf (LOG_DEBUG, 
-				    "Received Event Renewal for eventURL %s",
 #ifdef HAVE_UPNPSTRING_PUBLISHERURL
+			Log_Printf (LOG_DEBUG,
+				    "Received Event Renewal for eventURL %s",
 				    NN(UpnpString_get_String(e->PublisherUrl)));
 #else
+			Log_Printf (LOG_DEBUG,
+				    "Received Event Renewal for eventURL %s",
 				    NN(e->PublisherUrl));
 #endif
 
@@ -595,10 +600,11 @@ DeviceList_EventHandlerCallback (const char *iface_name, Upnp_EventType event_ty
 
 #ifdef HAVE_UPNPSTRING_PUBLISHERURL
 			Service* const serv = GetService (UpnpString_get_String(e->PublisherUrl),
+							  FROM_EVENT_URL);
 #else
 			Service* const serv = GetService (e->PublisherUrl,
-#endif
 							  FROM_EVENT_URL);
+#endif
 			if (serv) {
 				if (event_type == 
 				    UPNP_EVENT_UNSUBSCRIBE_COMPLETE)
@@ -617,10 +623,11 @@ DeviceList_EventHandlerCallback (const char *iface_name, Upnp_EventType event_ty
 		struct Upnp_Event_Subscribe* e = 
 			(struct Upnp_Event_Subscribe*) event;
 
-		Log_Printf (LOG_DEBUG, "Renewing subscription for eventURL %s",
 #ifdef HAVE_UPNPSTRING_PUBLISHERURL
+		Log_Printf (LOG_DEBUG, "Renewing subscription for eventURL %s",
 			    NN(UpnpString_get_String(e->PublisherUrl)));
 #else
+		Log_Printf (LOG_DEBUG, "Renewing subscription for eventURL %s",
 			    NN(e->PublisherUrl));
 #endif
      
@@ -628,10 +635,11 @@ DeviceList_EventHandlerCallback (const char *iface_name, Upnp_EventType event_ty
       
 #ifdef HAVE_UPNPSTRING_PUBLISHERURL
 		Service* const serv = GetService (UpnpString_get_String(e->PublisherUrl),
+						  FROM_EVENT_URL);
 #else
 		Service* const serv = GetService (e->PublisherUrl,
-#endif
 						  FROM_EVENT_URL);
+#endif
 		if (serv) 
 			Service_SubscribeEventURL (iface_name, serv);
 		
@@ -650,6 +658,8 @@ DeviceList_EventHandlerCallback (const char *iface_name, Upnp_EventType event_ty
 	}
   	
   	// Delete all temporary strings
+	Log_Printf(LOG_DEBUG, "Deleting temp context: %p",
+		tmp_ctx);
 	talloc_free (tmp_ctx);
 
 	return 0;
