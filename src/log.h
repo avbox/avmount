@@ -161,29 +161,6 @@ void Log_SetMaxLevel (Log_Level max_level);
 
 
 /**
- * @brief Predicate : tests if a log level is output or not
- *	  (see Log_SetMaxLevel).
- *
- * @param level  	log level to test
- */
-bool Log_IsActivated (Log_Level level);
-
-
-/**
- * @brief Functions to lock / unlock the logger.
- *	Functions to lock / unlock the logger, to prevent other threads 
- *	of intermixing their own outputs.
- *	NOTE : a lock is automatically performed for each individual 
- *	"Log_Print", therefore explicit "lock" and "unlock" are only 
- *	necessary when a thread wants to display atomically a large amount 
- *	of text in several "Log_Print" calls.
- */
-
-int Log_Lock (void);
-int Log_Unlock (void);
-
-
-/**
  * @brief Authorize colorizing log output (default : false).
  */
 void Log_Colorize (bool colorize);

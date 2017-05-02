@@ -39,8 +39,7 @@ static Log_PrintFunction gPrintFun = NULL;
 /*
  * Mutex to control displaying of events
  */
-static bool g_initialized = false;
-static ithread_mutex_t g_log_mutex;
+static pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 
 /*
@@ -84,16 +83,6 @@ static const char* const COLOR_UNKNOWN_LEVEL = VT_RED_BRIGHT;
 int
 Log_Initialize (Log_PrintFunction print_function )
 {
-	if (! g_initialized) {
-		ithread_mutexattr_t attr;
-		
-		ithread_mutexattr_init (&attr);
-		ithread_mutexattr_setkind_np (&attr,
-					      ITHREAD_MUTEX_RECURSIVE_NP);
-		ithread_mutex_init (&g_log_mutex, &attr);
-		ithread_mutexattr_destroy (&attr);
-		g_initialized = true;
-	}
 	gPrintFun = print_function;
 	return 0;
 }
@@ -106,10 +95,6 @@ int
 Log_Finish ()
 {
 	gPrintFun = NULL;
-	if (g_initialized) {
-		g_initialized = false;
-		ithread_mutex_destroy (&g_log_mutex);
-	}
 	return 0;
 }
 
@@ -117,10 +102,10 @@ Log_Finish ()
 /*****************************************************************************
  * Log_IsActivated
  *****************************************************************************/
-bool
+static bool
 Log_IsActivated (Log_Level level) 
 {
-	return ( g_initialized && gPrintFun && level <= g_max_level );
+	return ( gPrintFun && level <= g_max_level );
 }
 
 
@@ -131,9 +116,9 @@ int
 Log_Print (Log_Level level, const char* msg)
 {
 	if (Log_IsActivated (level) && msg) { 
-		ithread_mutex_lock (&g_log_mutex);
+		pthread_mutex_lock(&log_mutex);
 		gPrintFun (level, msg);
-		ithread_mutex_unlock (&g_log_mutex);
+		pthread_mutex_unlock(&log_mutex);
 	}
 	return 0;
 }
@@ -154,9 +139,9 @@ Log_Printf (Log_Level level, const char* fmt, ... )
 		va_end (ap);
 		
 		if (rc >= 0) {
-			ithread_mutex_lock (&g_log_mutex);
+			pthread_mutex_lock(&log_mutex);
 			gPrintFun (level, buf);
-			ithread_mutex_unlock (&g_log_mutex);
+			pthread_mutex_unlock(&log_mutex);
 		}
 		return rc;
 	}
@@ -172,23 +157,6 @@ void
 Log_SetMaxLevel (Log_Level max_level)
 {
 	g_max_level = max_level;
-}
-
-
-/*****************************************************************************
- * Log_Lock / Log_Unlock
- *****************************************************************************/
-
-int
-Log_Lock()
-{
-	return ithread_mutex_lock (&g_log_mutex);
-}
-
-int
-Log_Unlock()
-{
-	return ithread_mutex_unlock (&g_log_mutex);
 }
 
 
