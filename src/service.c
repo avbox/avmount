@@ -112,6 +112,8 @@ Service_UnsubscribeEventURL (Service* serv)
 		 * If we have a valid control SID, then unsubscribe 
 		 */
 		assert(serv->iface != NULL);
+		Log_Printf(LOG_DEBUG, "Unsubscribe: handle=%i sid=%s",
+			serv->ctrlpt_handle, serv->sid);
 		rc = ClientManager_UpnpUnSubscribe(serv->iface,
 			serv->ctrlpt_handle, serv->sid);
 		if ( UPNP_E_SUCCESS == rc ) {

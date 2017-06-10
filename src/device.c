@@ -209,7 +209,7 @@ Device_Create (void* parent_context,
 	Log_Printf (LOG_DEBUG, "Device_Create : Id = '%s', "
 		    "description document = "
 		    "--------------------\n%s\n--------------------",
-		    NN(deviceId), descDocText);
+		    NN(deviceId), /*descDocText*/NULL);
 
 	IXML_Document* descDoc = NULL;
 	int rc = ixmlParseBufferEx (discard_const_p (char, descDocText), 

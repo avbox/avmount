@@ -96,6 +96,8 @@ static int upnp_port = 0;
 static int abort_mon = 0;
 static int lobind = 0;
 static pid_t mainpid = 0;
+static pthread_mutex_t mon_lock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t mon_cond = PTHREAD_COND_INITIALIZER;
 static pthread_t monthread;
 
 LIST_DECLARE_STATIC(ifaces);
@@ -149,7 +151,7 @@ jmp_buf TimeoutJmpBuf;
 	write_or_die(fd, str, __left); \
 }
 
-#define PIPE_WRITE_SID(fd, sid) write_or_die(fd, sid, sizeof(Upnp_SID))
+#define PIPE_WRITE_SID(fd, sid) write_or_die(fd, sid, 44)
 
 #define PIPE_WRITE_XML(fd, xmldoc) \
 { \
@@ -201,7 +203,7 @@ jmp_buf TimeoutJmpBuf;
 	talloc_free(__xml); \
 }
 
-#define PIPE_READ_SID(fd, sid) read_or_die(fd, sid, sizeof(Upnp_SID))
+#define PIPE_READ_SID(fd, sid) read_or_die(fd, sid, 44)
 
 #define PIPE_FREE_STRING(str) talloc_free(str)
 #define PIPE_FREE_XML(xml) ixmlDocument_free(xml)
@@ -470,7 +472,7 @@ UPNP_READY:
 			UpnpClient_Handle handle;
 			char *eventURL;
 			int timeout;
-			Upnp_SID sid;
+			Upnp_SID sid = "";
 
 			PIPE_READ_VALUE(infd, handle);
 			PIPE_READ_STRING(infd, eventURL);
@@ -983,8 +985,6 @@ CLEANUP_RESTART:
 	pthread_mutex_lock(&list_lock);
 	LIST_FOREACH_SAFE(iface_t*, ent, &ifaces, {
 		if (!ent->keep) {
-			ClientManager_RemoveInterface(ent);
-
 			/*
 			 * if the child process is running send it the EXIT command
 			 * and wait for it to exit (we'll know it exited when it's
@@ -1003,6 +1003,7 @@ CLEANUP_RESTART:
 				}
 				goto CLEANUP_RESTART;
 			}
+			ClientManager_RemoveInterface(ent);
 		}
 	});
 	pthread_mutex_unlock(&list_lock);
@@ -1062,14 +1063,22 @@ ClientManager_EnumInterfacesCallback(const char * const iface_name, void *data)
 static void*
 ClientManager_MonitorInterfaces(void *arg)
 {
+	struct timespec tv;
+
 	(void) arg;
 
 	while (abort_mon == 0) {
+		pthread_mutex_lock(&mon_lock);
 		ClientManager_CleanupInit();
 		ifaceutil_enumifaces(ClientManager_EnumInterfacesCallback, NULL);
 		ClientManager_Cleanup();
-		sleep(POLL_INTERVAL);
+
+		clock_gettime(CLOCK_REALTIME, &tv);
+		tv.tv_sec += POLL_INTERVAL;
+		pthread_cond_timedwait(&mon_cond, &mon_lock, &tv);
+
 		ClientManager_CheckClients();
+		pthread_mutex_unlock(&mon_lock);
 	}
 	return NULL;
 }
@@ -1111,7 +1120,10 @@ ClientManager_Stop()
 	Log_Print(LOG_DEBUG, "ClientManager_Stop() -- Stopping");
 
 	/* wait for ClientManager to exit */
+	pthread_mutex_lock(&mon_lock);
 	abort_mon = 1;
+	pthread_cond_signal(&mon_cond);
+	pthread_mutex_unlock(&mon_lock);
 	pthread_join(monthread, NULL);
 }
 
