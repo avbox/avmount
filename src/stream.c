@@ -363,7 +363,6 @@ Stream_FillBuffer(Stream *file, char *buffer, size_t size)
 
 		if (maxfd == -1) {
 			usleep(100 * 1000);
-			continue;
 		} else {
 			rc = select(maxfd+1, &fdread, &fdwrite, &fdexcep, &timeout);
 		}
